@@ -41,6 +41,8 @@ win:
   verifyUpdateCodeSignature: false
 
 nsis:
+  artifactName: Pace-Setup.${ext}
+  artifactName: ${productName}-Setup.${ext}
   oneClick: false
   perMachine: false
   allowElevation: true
@@ -55,6 +57,6 @@ nsis:
 # IMPORTANT: set `owner` to your GitHub username (repo name can stay if you name it pace-browser).
 publish:
   provider: github
-  owner: crownedchampion
+  owner: CrownedChampion
   repo: pace-browser
   releaseType: release
