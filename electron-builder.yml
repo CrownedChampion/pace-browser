@@ -55,6 +55,6 @@ nsis:
 # IMPORTANT: set `owner` to your GitHub username (repo name can stay if you name it pace-browser).
 publish:
   provider: github
-  owner: YOUR_GITHUB_USERNAME
+  owner: crownedchampion
   repo: pace-browser
   releaseType: release
