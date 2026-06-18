@@ -163,8 +163,7 @@
     <h2>Help keep Pace free</h2>
     <p style="color:var(--t2)">Pace is built and maintained by one developer. If it's useful to you, a small donation helps cover development time and keeps new features coming.</p>
     <div class="donate-opts">
-      <a class="btn btn-primary" href="https://ko-fi.com/YOUR_KOFI" target="_blank" rel="noopener">☕ Donate via Ko-fi</a>
-      <a class="btn btn-ghost" href="https://github.com/sponsors/CrownedChampion" target="_blank" rel="noopener">💜 GitHub Sponsors</a>
+      <a class="btn btn-primary" href="https://github.com/sponsors/CrownedChampion" target="_blank" rel="noopener">💜 GitHub Sponsors</a>
     </div>
   </div>
 </section>
@@ -178,11 +177,6 @@
     </div>
     <div class="form-card">
       <form id="feature-form">
-        <!-- Web3Forms: sign up free at https://web3forms.com with cbusinessact@proton.me and paste your key below -->
-        <input type="hidden" name="access_key" value="YOUR_WEB3FORMS_ACCESS_KEY">
-        <input type="hidden" name="subject" value="New Pace Browser feature request">
-        <input type="hidden" name="from_name" value="Pace Browser Website">
-        <input type="checkbox" name="botcheck" class="hp" tabindex="-1" autocomplete="off">
         <div class="field">
           <label for="f-name">Your name</label>
           <input id="f-name" type="text" name="name" placeholder="Jane Doe" required>
@@ -226,41 +220,25 @@
 </footer>
 
 <script>
-  // Feature-request form via Web3Forms (works on static hosting like Cloudflare Pages)
+  // Feature-request form -> opens the user's email client pre-filled (works on any static host, no API key)
   const form = document.getElementById('feature-form');
   const msg = document.getElementById('form-msg');
-  const submitBtn = document.getElementById('f-submit');
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
-    msg.className = 'form-msg';
-    const key = form.querySelector('[name=access_key]').value;
-    if (!key || key === 'YOUR_WEB3FORMS_ACCESS_KEY') {
-      msg.textContent = 'Form not configured yet. Email cbusinessact@proton.me directly.';
-      msg.className = 'form-msg err';
-      return;
-    }
-    submitBtn.disabled = true; submitBtn.textContent = 'Sending…';
-    try {
-      const res = await fetch('https://api.web3forms.com/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(new FormData(form)))
-      });
-      const data = await res.json();
-      if (data.success) {
-        form.reset();
-        msg.textContent = '✅ Thanks! Your message was sent.';
-        msg.className = 'form-msg ok';
-      } else {
-        msg.textContent = data.message || 'Something went wrong. Please email us instead.';
-        msg.className = 'form-msg err';
-      }
-    } catch (err) {
-      msg.textContent = 'Network error. Please email cbusinessact@proton.me instead.';
-      msg.className = 'form-msg err';
-    } finally {
-      submitBtn.disabled = false; submitBtn.textContent = 'Send request';
-    }
+    const name = (form.querySelector('[name=name]').value || '').trim();
+    const email = (form.querySelector('[name=email]').value || '').trim();
+    const type = form.querySelector('[name=type]').value;
+    const message = (form.querySelector('[name=message]').value || '').trim();
+    const subject = encodeURIComponent('[Pace] ' + type + ' from ' + (name || 'website'));
+    const body = encodeURIComponent(
+      'Name: ' + name + '\n' +
+      'Email: ' + email + '\n' +
+      'Type: ' + type + '\n\n' +
+      message
+    );
+    window.location.href = 'mailto:cbusinessact@proton.me?subject=' + subject + '&body=' + body;
+    msg.textContent = 'Opening your email app… if nothing happens, email cbusinessact@proton.me directly.';
+    msg.className = 'form-msg ok';
   });
 </script>
 </body>
