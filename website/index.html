@@ -178,28 +178,24 @@
     <div class="form-card">
       <form id="feature-form">
         <div class="field">
-          <label for="f-name">Your name</label>
-          <input id="f-name" type="text" name="name" placeholder="Jane Doe" required>
-        </div>
-        <div class="field">
-          <label for="f-email">Email (so we can reply)</label>
-          <input id="f-email" type="email" name="email" placeholder="you@example.com" required>
-        </div>
-        <div class="field">
           <label for="f-type">Type</label>
           <select id="f-type" name="type">
-            <option>Feature request</option>
-            <option>Bug report</option>
-            <option>General feedback</option>
+            <option value="Feature Request">Feature request</option>
+            <option value="Bug">Bug report</option>
+            <option value="Feedback">Feedback</option>
           </select>
         </div>
         <div class="field">
-          <label for="f-msg">Tell us about it</label>
+          <label for="f-title">Title</label>
+          <input id="f-title" type="text" name="title" placeholder="Short summary" required>
+        </div>
+        <div class="field">
+          <label for="f-msg">Details</label>
           <textarea id="f-msg" name="message" placeholder="Describe the feature or issue…" required></textarea>
         </div>
-        <button class="btn btn-primary" type="submit" id="f-submit" style="width:100%;justify-content:center">Send request</button>
+        <button class="btn btn-primary" type="submit" id="f-submit" style="width:100%;justify-content:center">Submit on GitHub</button>
         <div class="form-msg" id="form-msg"></div>
-        <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--t3)">or email us directly at <a href="mailto:cbusinessact@proton.me" style="color:var(--t2)">cbusinessact@proton.me</a></div>
+        <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--t3)">Opens a pre-filled GitHub issue (free account needed) · or email <a href="mailto:cbusinessact@proton.me" style="color:var(--t2)">cbusinessact@proton.me</a></div>
       </form>
     </div>
   </div>
@@ -220,24 +216,28 @@
 </footer>
 
 <script>
-  // Feature-request form -> opens the user's email client pre-filled (works on any static host, no API key)
+  // Feature/bug/feedback form -> opens a pre-filled GitHub issue (no server/token needed; safe for static hosting)
   const form = document.getElementById('feature-form');
   const msg = document.getElementById('form-msg');
+  const REPO = 'CrownedChampion/pace-browser';
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const name = (form.querySelector('[name=name]').value || '').trim();
-    const email = (form.querySelector('[name=email]').value || '').trim();
-    const type = form.querySelector('[name=type]').value;
-    const message = (form.querySelector('[name=message]').value || '').trim();
-    const subject = encodeURIComponent('[Pace] ' + type + ' from ' + (name || 'website'));
-    const body = encodeURIComponent(
-      'Name: ' + name + '\n' +
-      'Email: ' + email + '\n' +
-      'Type: ' + type + '\n\n' +
-      message
-    );
-    window.location.href = 'mailto:cbusinessact@proton.me?subject=' + subject + '&body=' + body;
-    msg.textContent = 'Opening your email app… if nothing happens, email cbusinessact@proton.me directly.';
+    const type = form.querySelector('[name=type]').value;     // "Feature Request" | "Bug" | "Feedback"
+    const userTitle = (form.querySelector('[name=title]').value || '').trim();
+    const details = (form.querySelector('[name=message]').value || '').trim();
+    if (!userTitle || !details) {
+      msg.textContent = 'Please fill in both a title and details.';
+      msg.className = 'form-msg err';
+      return;
+    }
+    const title = type + ': ' + userTitle;
+    const labelMap = { 'Feature Request': 'enhancement', 'Bug': 'bug', 'Feedback': 'feedback' };
+    const url = 'https://github.com/' + REPO + '/issues/new'
+      + '?title=' + encodeURIComponent(title)
+      + '&labels=' + encodeURIComponent(labelMap[type] || '')
+      + '&body=' + encodeURIComponent(details);
+    window.open(url, '_blank', 'noopener');
+    msg.textContent = 'Opening GitHub to submit your ' + type.toLowerCase() + '… click "Submit new issue" there to finish.';
     msg.className = 'form-msg ok';
   });
 </script>
