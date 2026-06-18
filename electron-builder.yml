@@ -42,7 +42,6 @@ win:
 
 nsis:
   artifactName: Pace-Setup.${ext}
-  artifactName: ${productName}-Setup.${ext}
   oneClick: false
   perMachine: false
   allowElevation: true
