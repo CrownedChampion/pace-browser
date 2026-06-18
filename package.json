@@ -1,0 +1,22 @@
+{
+  "name": "pace-browser",
+  "version": "1.0.0",
+  "description": "Pace Browser — Browse with extreme speed",
+  "main": "src/main/main.js",
+  "author": "That1Dev",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "pack": "electron-builder --dir",
+    "release": "electron-builder --win --x64 --publish always"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-chrome-web-store": "latest",
+    "electron-updater": "^6.1.8"
+  }
+}
