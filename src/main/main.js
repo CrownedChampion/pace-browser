@@ -17,6 +17,12 @@ try {
 // Loaded defensively so the app still launches if the dependency isn't installed yet.
 let webStore = null;
 try { webStore = require('electron-chrome-web-store'); } catch (e) { webStore = null; }
+// Optional: electron-chrome-extensions implements the chrome.tabs / chrome.windows APIs so
+// extensions that open their own tabs work. It needs a native-ish install (npm install
+// electron-chrome-extensions); if absent we fall back to the window-open handler below.
+let ElectronChromeExtensions = null;
+try { ElectronChromeExtensions = require('electron-chrome-extensions').ElectronChromeExtensions; } catch (e) { ElectronChromeExtensions = null; }
+let chromeExtensions = null;   // instance, created after the window exists
 // Auto-update via GitHub Releases (electron-updater). Defensive so dev runs without it still work.
 let autoUpdater = null;
 try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) { autoUpdater = null; }
@@ -57,6 +63,9 @@ app.commandLine.appendSwitch('enable-smooth-scrolling');
 app.commandLine.appendSwitch('autoplay-policy', 'user-gesture-required');
 app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization,ParallelDownloading,SmoothScrolling');
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
+// Allow extensions (Shazam etc.) to capture tab audio and use getUserMedia without a fake-UI prompt.
+app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
+app.commandLine.appendSwitch('allow-http-screen-capture');
 
 // Present as plain Chrome (strip Electron/app tokens) so sites like the Chrome Web Store don't reject us
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -510,6 +519,7 @@ function createTab(tabUrl = 'pace://newtab', background = false) {
   }
   navigateView(view, tabUrl);
   mainWindow.webContents.send('tab-created', { tabId, url: formatUrl(tabUrl), active: !background });
+  try { if (chromeExtensions) chromeExtensions.addTab(view.webContents, mainWindow); } catch (e) {}
   return tabId;
 }
 
@@ -817,10 +827,12 @@ ipcMain.handle('set-default-browser', () => {
   let isDefault = false;
   try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch (e) {}
   try { isDefault = app.isDefaultProtocolClient('http'); } catch (e) {}
-  // Windows 10/11 require the user to confirm in Settings — deep-link straight to the default-apps
-  // page (the installer registers Pace's browser capabilities so it appears in the list there).
+  // Windows 10/11 require the user to confirm in Settings. Deep-link straight to Pace Browser's
+  // own page in Default Apps (registeredAppUser = the StartMenuInternet name the installer sets).
   if (process.platform === 'win32') {
-    try { shell.openExternal('ms-settings:defaultapps'); } catch (e) {}
+    let opened = false;
+    try { shell.openExternal('ms-settings:defaultapps?registeredAppUser=Pace%20Browser'); opened = true; } catch (e) {}
+    if (!opened) { try { shell.openExternal('ms-settings:defaultapps'); } catch (e) {} }
   }
   const s = loadSettings(); s.askedDefault = true; saveSettings(s);
   return { isDefault, opened: process.platform === 'win32' };
@@ -921,6 +933,13 @@ ipcMain.on('show-bookmarks-bar-menu', (e) => {
       { label: 'From Opera', click: () => act({ action: 'import', source: 'opera' }) },
       { type: 'separator' },
       { label: 'From HTML file\u2026', click: () => act({ action: 'import', source: 'html' }) },
+    ]},
+    { type: 'separator' },
+    { label: 'Clear bookmarks', submenu: [
+      { label: 'Clear bookmarks bar', click: () => act({ action: 'clear', scope: 'bar' }) },
+      { label: 'Clear other bookmarks', click: () => act({ action: 'clear', scope: 'other' }) },
+      { type: 'separator' },
+      { label: 'Clear all bookmarks', click: () => act({ action: 'clear', scope: 'all' }) },
     ]},
     { type: 'separator' },
     { label: 'Hide bookmarks bar', click: () => act({ action: 'hide' }) },
@@ -1657,6 +1676,28 @@ app.whenReady().then(async () => {
   syncExtMeta();                 // record paths/metadata of everything that loaded
   await applyDisabledExtensions(); // unload anything the user had disabled
   createMainWindow();
+
+  // If electron-chrome-extensions is installed, wire up the chrome.tabs / chrome.windows APIs so
+  // extensions that open their own tabs work. We map its tab operations onto Pace's tab system.
+  if (ElectronChromeExtensions && mainWindow) {
+    try {
+      const findTabId = (wc) => { try { return Object.keys(tabs).find(id => tabs[id] && tabs[id].webContents === wc); } catch (e) { return null; } };
+      chromeExtensions = new ElectronChromeExtensions({
+        session: session.defaultSession,
+        createTab: (details) => {
+          const id = createTab(details && details.url ? details.url : 'pace://newtab', !(details && details.active !== false));
+          const view = tabs[id];
+          return Promise.resolve([view.webContents, mainWindow]);
+        },
+        selectTab: (tab) => { try { const id = findTabId(tab); if (id) switchTab(id); } catch (e) {} },
+        removeTab: (tab) => { try { const id = findTabId(tab); if (id) closeTab(id); } catch (e) {} },
+        createWindow: () => Promise.resolve(mainWindow),
+        assignTabDetails: () => {},
+      });
+      // Register already-open tabs so the API sees them
+      try { Object.keys(tabs).forEach(id => { if (tabs[id] && tabs[id].webContents) chromeExtensions.addTab(tabs[id].webContents, mainWindow); }); } catch (e) {}
+    } catch (e) { chromeExtensions = null; }
+  }
 
   // Auto-update: download in the background and install on quit; re-check periodically.
   if (autoUpdater && app.isPackaged) {

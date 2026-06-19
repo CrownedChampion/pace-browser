@@ -765,6 +765,12 @@ function toggleBookmarksBarSetting(){ settings.showBookmarksBar=!(settings.showB
 async function handleBmBarAction(p){
   if(!p)return;
   if(p.action==='hide'){ settings.showBookmarksBar=false; pace.saveSettings(settings); applyBookmarksBar(); toast('Bookmarks bar hidden — re-enable in Quick Settings'); return; }
+  if(p.action==='clear'){
+    const labels={all:'ALL bookmarks',bar:'all bookmarks on the bar',other:'all "Other" bookmarks'};
+    if(!confirm('Remove '+(labels[p.scope]||'bookmarks')+'? This cannot be undone.'))return;
+    if(pace.clearBookmarks){ await pace.clearBookmarks(p.scope); bookmarks=await pace.getBookmarks()||[]; renderBookmarks(); updateStar(); toast('🔖 Bookmarks cleared','ok'); }
+    return;
+  }
   if(p.action==='import'){
     toast('Importing bookmarks…');
     const r=await pace.importBookmarks(p.source);

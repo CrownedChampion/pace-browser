@@ -45,10 +45,13 @@
   ; Register the app's capabilities with Windows
   WriteRegStr HKCU "Software\RegisteredApplications" "Pace Browser" "Software\PaceBrowser\Capabilities"
 
-  ; Offer to open Windows "Default Apps" so the user can pick Pace as default.
-  MessageBox MB_YESNO|MB_ICONQUESTION "Set Pace Browser as your default browser?$\r$\n$\r$\nWindows will open the Default Apps settings where you can choose Pace Browser." IDNO skipDefault
-    ExecShell "open" "ms-settings:defaultapps"
-  skipDefault:
+  ; Offer to open Windows "Default Apps" — ONLY on a fresh install, never during an auto-update.
+  ; ${isUpdated} is set by electron-builder's NSIS when the run is an update over an existing install.
+  ${ifNot} ${isUpdated}
+    MessageBox MB_YESNO|MB_ICONQUESTION "Set Pace Browser as your default browser?$\r$\n$\r$\nWindows will open the Default Apps settings where you can choose Pace Browser." IDNO skipDefault
+      ExecShell "open" "ms-settings:defaultapps"
+    skipDefault:
+  ${endIf}
 !macroend
 
 !macro customUnInstall
