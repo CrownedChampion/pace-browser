@@ -1,6 +1,7 @@
 const { app, BrowserWindow, BrowserView, ipcMain, protocol, session, shell, Menu, MenuItem, dialog, clipboard, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 // electron-chrome-web-store uses the Web Crypto API (crypto.subtle) to verify CRX signatures.
 // Electron's older Node (18) doesn't expose `crypto` as a global, so map it to Node's webcrypto.
 try { if (typeof globalThis.crypto === 'undefined') globalThis.crypto = require('crypto').webcrypto; } catch (e) {}
@@ -1225,6 +1226,41 @@ function decryptField(blob, key) {
 }
 function vaultExists() { const v = readVault(); return !!(v && v.salt && v.verifier); }
 
+// ── Windows Hello (scaffolding) ──────────────────────────────────────────────────
+// Real biometrics need a native module (e.g. one exposing windows.security.credentials.ui).
+// We can't build that in every environment, so the biometric step lives behind ONE function,
+// helloAuthenticate(), which you can swap for a real native call later. Everything else —
+// enabling Hello, wrapping/unwrapping the vault key, the UI — is fully wired now.
+//
+// How the key is protected: enabling Hello generates a random 32-byte "hello key", uses it to
+// AES-encrypt the master-derived vault key, and stores that wrapped blob in the vault. The hello
+// key itself is stored wrapped by a machine-bound value so it isn't sitting in plaintext. On
+// unlock we (1) require helloAuthenticate() to succeed, then (2) unwrap the vault key. Until a
+// real Hello module is installed, helloAuthenticate() returns false and the UI shows it as
+// unavailable — the master password always still works.
+let helloModule = null;
+try { helloModule = require('pace-windows-hello'); } catch (e) { helloModule = null; } // optional native addon
+
+async function helloAvailable() {
+  if (process.platform !== 'win32') return false;
+  if (helloModule && typeof helloModule.isAvailable === 'function') {
+    try { return await helloModule.isAvailable(); } catch (e) { return false; }
+  }
+  return false; // no native module yet
+}
+async function helloAuthenticate(reason) {
+  if (helloModule && typeof helloModule.requestVerification === 'function') {
+    try { return await helloModule.requestVerification(reason || 'Verify to unlock Pace passwords'); }
+    catch (e) { return false; }
+  }
+  return false; // stub: biometrics unavailable until a native module is added
+}
+// Machine-bound wrap so the stored hello key isn't plaintext (best-effort without native APIs).
+function machineKey() {
+  const seed = [os.hostname(), os.platform(), os.arch(), (os.userInfo().username || ''), app.getPath('userData')].join('|');
+  return crypto.createHash('sha256').update('pace-hello-v1|' + seed).digest();
+}
+
 // Create the vault for the first time with a chosen master password.
 ipcMain.handle('vault-create', (e, { masterPassword }) => {
   try {
@@ -1345,6 +1381,120 @@ ipcMain.handle('vault-generate', (e, opts) => {
   for (let i = 0; i < len; i++) out += sets[bytes[i] % sets.length];
   return { ok: true, password: out };
 });
+
+// ── Windows Hello unlock IPC ──
+ipcMain.handle('hello-status', async () => {
+  const v = readVault();
+  return { available: await helloAvailable(), enabled: !!(v && v.hello) };
+});
+
+// Enable Hello: requires the vault to be unlocked (so we have the real key to wrap).
+ipcMain.handle('hello-enable', async () => {
+  try {
+    if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'Unlock the vault first.' };
+    if (!(await helloAvailable())) return { ok: false, reason: 'Windows Hello isn’t available on this device yet.' };
+    const ok = await helloAuthenticate('Set up Windows Hello for Pace passwords');
+    if (!ok) return { ok: false, reason: 'Windows Hello verification was cancelled.' };
+    const v = readVault(); if (!v) return { ok: false, reason: 'No vault.' };
+    const helloKey = crypto.randomBytes(32);
+    // wrap the vault key with the hello key, and wrap the hello key with the machine key
+    const wrappedVaultKey = encryptField(vaultKey.toString('base64'), helloKey);
+    const wrappedHelloKey = encryptField(helloKey.toString('base64'), machineKey());
+    v.hello = { wrappedVaultKey, wrappedHelloKey };
+    if (!writeVaultFile(v)) return { ok: false, reason: 'Could not save.' };
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
+});
+
+ipcMain.handle('hello-disable', () => {
+  try { const v = readVault(); if (v && v.hello) { delete v.hello; writeVaultFile(v); } return { ok: true }; }
+  catch (e) { return { ok: false }; }
+});
+
+// Unlock the vault using Windows Hello instead of the master password.
+ipcMain.handle('hello-unlock', async () => {
+  try {
+    const v = readVault();
+    if (!v || !v.hello) return { ok: false, reason: 'Hello not set up.' };
+    if (!(await helloAvailable())) return { ok: false, reason: 'Windows Hello unavailable.' };
+    const ok = await helloAuthenticate('Unlock Pace passwords');
+    if (!ok) return { ok: false, reason: 'Verification failed.' };
+    const helloKeyB64 = decryptField(v.hello.wrappedHelloKey, machineKey());
+    const helloKey = Buffer.from(helloKeyB64, 'base64');
+    const vaultKeyB64 = decryptField(v.hello.wrappedVaultKey, helloKey);
+    vaultKey = Buffer.from(vaultKeyB64, 'base64');
+    vaultUnlocked = true;
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: 'Could not unlock with Hello.' }; }
+});
+
+// ── Import passwords from a Chrome/Edge/Brave CSV export ──
+// Chromium browsers export: name,url,username,password (header row present).
+ipcMain.handle('vault-import-csv', async () => {
+  try {
+    if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'Unlock the vault first.' };
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import passwords from CSV',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      properties: ['openFile']
+    });
+    if (res.canceled || !res.filePaths || !res.filePaths[0]) return { ok: false, reason: 'cancelled' };
+    const text = fs.readFileSync(res.filePaths[0], 'utf8');
+    const rows = parseCsv(text);
+    if (!rows.length) return { ok: false, reason: 'No rows found in CSV.' };
+    // Map header columns (Chrome/Edge/Brave use name,url,username,password; order can vary).
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const ci = {
+      name: header.indexOf('name'),
+      url: header.indexOf('url'),
+      username: header.indexOf('username'),
+      password: header.indexOf('password'),
+    };
+    if (ci.password === -1) return { ok: false, reason: 'CSV is missing a "password" column. Use a Chrome/Edge/Brave export.' };
+    const v = readVault(); if (!v) return { ok: false, reason: 'No vault.' };
+    v.entries = v.entries || [];
+    let added = 0, skipped = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i]; if (!r || !r.length) continue;
+      const password = ci.password > -1 ? (r[ci.password] || '') : '';
+      if (!password) { skipped++; continue; }
+      const url = ci.url > -1 ? (r[ci.url] || '') : '';
+      const username = ci.username > -1 ? (r[ci.username] || '') : '';
+      let site = ci.name > -1 ? (r[ci.name] || '') : '';
+      if (!site && url) { try { site = new URL(url).hostname; } catch (e) { site = url; } }
+      // de-dupe on url-domain + username
+      const dup = v.entries.find(en => (en.username || '') === username && (en.url || '') === url);
+      if (dup) { skipped++; continue; }
+      v.entries.push({ id: crypto.randomUUID(), site: site || url || '(imported)', username, url, password: encryptField(password, vaultKey), updated: Date.now() });
+      added++;
+    }
+    if (!writeVaultFile(v)) return { ok: false, reason: 'Could not save imported passwords.' };
+    return { ok: true, added, skipped };
+  } catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
+});
+
+// Minimal RFC-4180-ish CSV parser (handles quoted fields, commas, escaped quotes, CRLF).
+function parseCsv(text) {
+  const rows = []; let row = []; let field = ''; let i = 0; let inQuotes = false;
+  text = String(text).replace(/^\uFEFF/, ''); // strip BOM
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQuotes = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += c; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length && !(r.length === 1 && r[0] === ''));
+}
 
 // ─── Autofill (security-critical) ────────────────────────────────────────────────
 // Trust model:

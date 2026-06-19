@@ -508,6 +508,7 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
     <div class="swatches" id="qs-swatches2"></div>
   </div>
   <div class="qs-foot">
+    <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsPasswords()">🔐 Passwords</button>
     <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsClearData(this)">🧹 Clear browsing data</button>
     <button class="qs-more" onclick="openFullSettings()">More settings →</button>
   </div>
@@ -911,7 +912,11 @@ function bindAddr(){
   addr.addEventListener('input',e=>{
     const v=e.target.value.trim(); showSugg(v); updateHint(v);
     if(activeTabId!=null&&tabs[activeTabId])tabs[activeTabId].addrDraft=e.target.value;
-    if(settings.fastMode&&v.length>2){ clearTimeout(preloadTimeout); preloadTimeout=setTimeout(()=>{ const isUrl=/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/.test(v)&&!v.includes(' '); if(isUrl){ const u=v.startsWith('http')?v:'https://'+v; if(!preloadedUrls.has(u)){preloadedUrls.add(u);pace.preloadUrl(u);showFastBadge();} } },300); }
+    if(settings.fastMode&&v.length>2){ clearTimeout(preloadTimeout); preloadTimeout=setTimeout(()=>{
+      const isUrl=/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/.test(v)&&!v.includes(' ');
+      if(isUrl){ const u=v.startsWith('http')?v:'https://'+v; if(!preloadedUrls.has(u)){preloadedUrls.add(u);pace.preloadUrl(u);showFastBadge();} }
+      else { const m=TOP_SITES.find(s=>s.startsWith(v.toLowerCase())&&s.includes('.')); if(m){ const u='https://'+m; if(!preloadedUrls.has(u)){preloadedUrls.add(u);pace.preloadUrl(u);} } }
+    },120); }
   });
   addr.addEventListener('keydown',e=>{
     const items=document.querySelectorAll('.si');
@@ -1070,6 +1075,7 @@ function qsToggle(key,el){ settings[key]=!settings[key]; el.classList.toggle('on
 function qsToggleBookmarks(el){ toggleBookmarksBarSetting(); el.classList.toggle('on',settings.showBookmarksBar!==false); }
 function qsGlass(g){ settings.glassStrength=g; applyGlass(); pace.saveSettings(settings); syncQuickSettings(); }
 function openFullSettings(){ closeQuickSettings(); pace.navigate('pace://settings'); }
+function qsPasswords(){ closeQuickSettings(); pace.navigate('pace://passwords'); }
 function openSettingsPanel(){
   if(settingsPanelOpen)return;
   settingsPanelOpen=true;

@@ -89,6 +89,11 @@ if (isInternalPacePage()) {
     vaultDeleteEntry: (id) => ipcRenderer.invoke('vault-delete-entry', { id }),
     vaultChangeMaster: (currentPassword, newPassword) => ipcRenderer.invoke('vault-change-master', { currentPassword, newPassword }),
     vaultGenerate: (length) => ipcRenderer.invoke('vault-generate', { length }),
+    vaultImportCsv: () => ipcRenderer.invoke('vault-import-csv'),
+    helloStatus: () => ipcRenderer.invoke('hello-status'),
+    helloEnable: () => ipcRenderer.invoke('hello-enable'),
+    helloDisable: () => ipcRenderer.invoke('hello-disable'),
+    helloUnlock: () => ipcRenderer.invoke('hello-unlock'),
 
     on: (channel, fn) => {
       const allowed = ['tab-created', 'tab-closed', 'tab-switched', 'tab-update', 'tab-loading',
