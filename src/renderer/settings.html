@@ -253,7 +253,7 @@ async function checkUpdates(){
   if(sub)sub.textContent='Checking for updates…';
   const r=await window.pace.checkForUpdates();
   if(btn){btn.disabled=false;btn.textContent='Check for updates';}
-  if(r&&r.ok){ if(sub)sub.textContent=r.version?('Update found: v'+r.version+' — downloading…'):'You’re up to date.'; }
+  if(r&&r.ok){ if(sub)sub.textContent=r.upToDate?('You’re up to date (v'+(r.version||'')+').'):('Update found: v'+r.version+' — downloading…'); }
   else if(sub)sub.textContent=(r&&r.reason)||'Could not check for updates.';
 }
 function onUpdateStatus(s){

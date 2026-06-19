@@ -385,7 +385,7 @@ async function fetchScores(){
     var when=fmtGameWhen(g.date);
     var rightTop=(g.homeScore!==''||g.awayScore!=='')?'<div class="score-result">'+esc(g.awayScore)+' – '+esc(g.homeScore)+'</div>':'<div class="score-result" style="font-size:10px;color:var(--t3)">'+(when.timeOnly||'TBD')+'</div>';
     var rightSub=g.isFinal?'Final'+(when.dateShort?' · '+when.dateShort:''):g.isLive?'P'+esc(g.period||''):(when.dateShort||'');
-    return '<div class="score-row"><div class="score-teams"><div class="score-game">'+esc(g.away)+' vs '+esc(g.home)+(g.isLive?'<span class="score-live">LIVE'+(g.clock?' · '+esc(g.clock):'')+'</span>':'')+'</div><div class="score-league">'+g.emoji+' '+esc(g.league)+(when.full&&!g.isLive?' · '+esc(when.full):'')+'</div></div><div>'+rightTop+'<div class="score-final">'+esc(rightSub)+'</div></div></div>';
+    return '<div class="score-row"><div class="score-teams"><div class="score-game">'+esc(g.away)+' vs '+esc(g.home)+(g.isLive?'<span class="score-live">LIVE</span>':'')+'</div><div class="score-league">'+g.emoji+' '+esc(g.league)+(when.full&&!g.isLive?' · '+esc(when.full):'')+'</div></div><div>'+rightTop+'<div class="score-final">'+esc(rightSub)+'</div></div></div>';
   }).join('');
 }
 

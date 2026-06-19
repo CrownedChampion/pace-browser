@@ -391,6 +391,7 @@ function attachTabListeners(view, tabId) {
     else if (ctrl && k === 'd') mainWindow.webContents.send('app-shortcut', { action: 'bookmark' });
     else if ((ctrl && k === 'r') || k === 'f5') { if (tabs[activeTabId]) tabs[activeTabId].webContents.reload(); }
     else if (ctrl && k === 'tab') mainWindow.webContents.send('app-shortcut', { action: shift ? 'prev-tab' : 'next-tab' });
+    else if (k === 'f11') { try { mainWindow.setFullScreen(!mainWindow.isFullScreen()); } catch (e) {} }
     else handled = false;
     if (handled) event.preventDefault();
   });
@@ -739,7 +740,22 @@ function sendToAll(channel, payload) {
 ipcMain.handle('check-for-updates', async () => {
   if (!autoUpdater) return { ok: false, reason: 'Updater unavailable in this build.' };
   if (!app.isPackaged) return { ok: false, reason: 'Updates only work in the installed app.' };
-  try { const r = await autoUpdater.checkForUpdates(); return { ok: true, version: r && r.updateInfo && r.updateInfo.version }; }
+  try {
+    // Don't auto-download during a manual check; we decide based on version comparison.
+    const prevAuto = autoUpdater.autoDownload;
+    autoUpdater.autoDownload = false;
+    const r = await autoUpdater.checkForUpdates();
+    const found = r && r.updateInfo && r.updateInfo.version;
+    const current = app.getVersion();
+    if (!found || found === current) {
+      autoUpdater.autoDownload = prevAuto;
+      return { ok: true, upToDate: true, version: current };
+    }
+    // A genuinely newer version exists -> start the download now.
+    try { await autoUpdater.downloadUpdate(); } catch (e) {}
+    autoUpdater.autoDownload = prevAuto;
+    return { ok: true, upToDate: false, version: found };
+  }
   catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
 });
 ipcMain.on('quit-and-install', () => { try { if (autoUpdater) autoUpdater.quitAndInstall(); } catch (e) {} });

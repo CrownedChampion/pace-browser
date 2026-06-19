@@ -504,7 +504,13 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
   <div class="qs-row"><div><div class="qs-label">🔖 Show Bookmarks Bar</div></div>
     <div class="toggle" id="qs-bmbar" onclick="qsToggleBookmarks(this)"></div>
   </div>
-  <div class="qs-foot"><button class="qs-more" onclick="openFullSettings()">More settings →</button></div>
+  <div class="qs-row"><div><div class="qs-label">🎨 Secondary color</div><div class="qs-sub">Used for highlights &amp; accents</div></div>
+    <div class="swatches" id="qs-swatches2"></div>
+  </div>
+  <div class="qs-foot">
+    <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsClearData(this)">🧹 Clear browsing data</button>
+    <button class="qs-more" onclick="openFullSettings()">More settings →</button>
+  </div>
 </div>
 
 <div id="overlay" onclick="closeOverlays()"></div>
@@ -827,7 +833,7 @@ function handleBookmarkAction(action,index){
 function bindTabEvents(){
   pace.on('tab-created',({tabId,url,active})=>{ tabs[tabId]={tabId,url:url||'pace://newtab',title:'New Tab',loading:false}; if(active)activeTabId=tabId; renderTabs(); if(active){setAddrBar(url);pushLayout();} });
   pace.on('tab-closed',({tabId})=>{ delete tabs[tabId]; renderTabs(); });
-  pace.on('tab-switched',({tabId,url,title,canGoBack,canGoForward})=>{ activeTabId=tabId; if(tabs[tabId]&&title)tabs[tabId].title=title; renderTabs(); setAddrBar(url); setNavBtns(canGoBack,canGoForward); currentUrl=url||''; currentTitle=title||(tabs[tabId]&&tabs[tabId].title)||''; updateStar(); pushLayout(); });
+  pace.on('tab-switched',({tabId,url,title,canGoBack,canGoForward})=>{ saveAddrDraft(); activeTabId=tabId; if(tabs[tabId]&&title)tabs[tabId].title=title; renderTabs(); restoreAddrFor(tabId,url); setNavBtns(canGoBack,canGoForward); currentUrl=url||''; currentTitle=title||(tabs[tabId]&&tabs[tabId].title)||''; updateStar(); pushLayout(); });
   pace.on('tab-update',d=>{ if(!tabs[d.tabId])return; Object.assign(tabs[d.tabId],d); renderTabs(); if(d.tabId===activeTabId){ if(d.url!==undefined){setAddrBar(d.url);currentUrl=d.url;} if(d.title!==undefined)currentTitle=d.title; if(d.canGoBack!==undefined)setNavBtns(d.canGoBack,d.canGoForward); updateStar();} });
   pace.on('tab-loading',({tabId,loading})=>{ if(!tabs[tabId])return; tabs[tabId].loading=loading; renderTabs(); if(tabId===activeTabId)setLoading(loading); });
   const scroll=document.getElementById('tab-scroll');
@@ -872,6 +878,8 @@ function updatePlusButton(){
 function tabIconFor(t){ if(t.url&&t.url.startsWith('pace://'))return '<svg width="13" height="13" viewBox="0 0 28 28" fill="none"><path d="M9 7v14M9 7h6a4 4 0 0 1 0 8H9" stroke="url(#tpg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="tpg" x1="9" y1="7" x2="19" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="var(--acc)"/><stop offset="1" stop-color="var(--acc2)"/></linearGradient></defs></svg>'; return '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 6h9M6 1.5C6 1.5 4 3.5 4 6s2 4.5 2 4.5M6 1.5C6 1.5 8 3.5 8 6S6 10.5 6 10.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>'; }
 
 function setAddrBar(url){ const el=document.getElementById('addr'); if(document.activeElement!==el)el.value=url||''; document.getElementById('addr-icon').classList.toggle('secure',!!(url&&url.startsWith('https://'))); }
+function saveAddrDraft(){ const el=document.getElementById('addr'); if(!el||activeTabId==null||!tabs[activeTabId])return; if(document.activeElement===el){ tabs[activeTabId].addrDraft=el.value; } else { delete tabs[activeTabId].addrDraft; } }
+function restoreAddrFor(tabId,url){ const el=document.getElementById('addr'); const t=tabs[tabId]; if(t&&typeof t.addrDraft==='string'){ el.value=t.addrDraft; document.getElementById('addr-icon').classList.toggle('secure',false); } else { setAddrBar(url); } }
 function setNavBtns(back,fwd){ document.getElementById('btn-back').classList.toggle('disabled',!back); document.getElementById('btn-fwd').classList.toggle('disabled',!fwd); }
 
 function setLoading(loading){
@@ -902,6 +910,7 @@ function bindAddr(){
   addr.addEventListener('focus',()=>{ addr.select(); if(addr.value)showSugg(addr.value); });
   addr.addEventListener('input',e=>{
     const v=e.target.value.trim(); showSugg(v); updateHint(v);
+    if(activeTabId!=null&&tabs[activeTabId])tabs[activeTabId].addrDraft=e.target.value;
     if(settings.fastMode&&v.length>2){ clearTimeout(preloadTimeout); preloadTimeout=setTimeout(()=>{ const isUrl=/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/.test(v)&&!v.includes(' '); if(isUrl){ const u=v.startsWith('http')?v:'https://'+v; if(!preloadedUrls.has(u)){preloadedUrls.add(u);pace.preloadUrl(u);showFastBadge();} } },300); }
   });
   addr.addEventListener('keydown',e=>{
@@ -916,7 +925,7 @@ function bindAddr(){
   addr.addEventListener('blur',()=>setTimeout(hideSugg,160));
 }
 function updateHint(v){ const hint=document.getElementById('addr-hint'); if(!v||v.length<2){hint.textContent='';return;} const m=TOP_SITES.find(s=>s.startsWith(v.toLowerCase())&&s!==v.toLowerCase()); hint.textContent=m||''; }
-function doNavigate(raw){ if(!raw)return; hideSugg(); pace.navigate(raw); const a=document.getElementById('addr'); a.value=raw; document.getElementById('addr-hint').textContent=''; a.blur(); }
+function doNavigate(raw){ if(!raw)return; hideSugg(); if(activeTabId!=null&&tabs[activeTabId])delete tabs[activeTabId].addrDraft; pace.navigate(raw); const a=document.getElementById('addr'); a.value=raw; document.getElementById('addr-hint').textContent=''; a.blur(); }
 function showFastBadge(){ const b=document.getElementById('fast-badge'); b.classList.add('show'); setTimeout(()=>b.classList.remove('show'),2000); }
 
 function showSugg(v){
@@ -1028,6 +1037,13 @@ function buildQuickSettings(){
     +'<button class="sw-custom" title="Custom color"><input type="color" id="qs-color" value="'+(settings.accentColor||'#5b8ef0')+'"></button>';
   sw.querySelectorAll('.sw').forEach(el=>el.addEventListener('click',()=>qsAccent(el.dataset.c)));
   document.getElementById('qs-color').addEventListener('input',e=>qsAccent(e.target.value));
+  const sw2=document.getElementById('qs-swatches2');
+  if(sw2){
+    sw2.innerHTML=ACCENTS.map(c=>'<div class="sw'+((settings.accentColor2||'#a78bfa')===c?' active':'')+'" style="background:'+c+'" data-c="'+c+'"></div>').join('')
+      +'<button class="sw-custom" title="Custom color"><input type="color" id="qs-color2" value="'+(settings.accentColor2||'#a78bfa')+'"></button>';
+    sw2.querySelectorAll('.sw').forEach(el=>el.addEventListener('click',()=>qsAccent2(el.dataset.c)));
+    document.getElementById('qs-color2').addEventListener('input',e=>qsAccent2(e.target.value));
+  }
   syncQuickSettings();
 }
 function syncQuickSettings(){
@@ -1038,11 +1054,18 @@ function syncQuickSettings(){
   document.getElementById('qs-bmbar').classList.toggle('on',settings.showBookmarksBar!==false);
   document.querySelectorAll('#qs [data-g]').forEach(b=>b.classList.toggle('on',(settings.glassStrength||'medium')===b.dataset.g));
   document.querySelectorAll('#qs-swatches .sw').forEach(el=>el.classList.toggle('active',el.dataset.c===settings.accentColor));
+  document.querySelectorAll('#qs-swatches2 .sw').forEach(el=>el.classList.toggle('active',el.dataset.c===(settings.accentColor2||'#a78bfa')));
 }
 function toggleQuickSettings(){ if(qsOpen){closeQuickSettings();return;} closeExtPopup(); if(dlOpen)toggleDownloads(); qsOpen=true; syncQuickSettings(); document.getElementById('qs').classList.add('show'); pushLayout(); }
 function closeQuickSettings(){ qsOpen=false; document.getElementById('qs').classList.remove('show'); pushLayout(); }
 function qsTheme(v){ settings.theme=v; applyTheme(); pace.saveSettings(settings); syncQuickSettings(); }
 function qsAccent(c){ settings.accentColor=c; applyAccent(); pace.saveSettings(settings); syncQuickSettings(); }
+function qsAccent2(c){ settings.accentColor2=c; applyAccent(); pace.saveSettings(settings); syncQuickSettings(); }
+function qsClearData(btn){
+  if(btn&&btn.dataset.confirm!=='1'){ btn.dataset.confirm='1'; const o=btn.textContent; btn.textContent='Click again to confirm'; setTimeout(()=>{ if(btn.dataset.confirm==='1'){btn.dataset.confirm='';btn.textContent=o;} },3000); return; }
+  if(btn){btn.dataset.confirm='';btn.textContent='Clearing…';}
+  Promise.resolve(pace.clearBrowsingData&&pace.clearBrowsingData()).then(()=>{ if(btn)btn.textContent='✓ Cleared'; setTimeout(()=>{ if(btn)btn.textContent='🧹 Clear browsing data'; },1800); });
+}
 function qsToggle(key,el){ settings[key]=!settings[key]; el.classList.toggle('on',settings[key]); pace.saveSettings(settings); }
 function qsToggleBookmarks(el){ toggleBookmarksBarSetting(); el.classList.toggle('on',settings.showBookmarksBar!==false); }
 function qsGlass(g){ settings.glassStrength=g; applyGlass(); pace.saveSettings(settings); syncQuickSettings(); }
