@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('pace', {
   // Bookmarks
   getBookmarks:  () => ipcRenderer.invoke('get-bookmarks'),
   saveBookmarks: (b) => ipcRenderer.send('save-bookmarks', b),
+  clearBookmarks: (scope) => ipcRenderer.invoke('clear-bookmarks', { scope }),
   showBookmarkMenu: (index) => ipcRenderer.send('show-bookmark-menu', { index }),
   showOtherBookmarks: () => ipcRenderer.send('show-other-bookmarks'),
   getFavicon: (domain) => ipcRenderer.invoke('get-favicon', { domain }),
@@ -79,6 +80,18 @@ contextBridge.exposeInMainWorld('pace', {
   mediaControl: (action) => ipcRenderer.send('media-control', { action }),
   mediaClose: () => ipcRenderer.send('media-close'),
   clearBrowsingData: () => ipcRenderer.invoke('clear-browsing-data'),
+
+  // Password manager (vault) — all crypto happens in the main process
+  vaultStatus: () => ipcRenderer.invoke('vault-status'),
+  vaultCreate: (masterPassword) => ipcRenderer.invoke('vault-create', { masterPassword }),
+  vaultUnlock: (masterPassword) => ipcRenderer.invoke('vault-unlock', { masterPassword }),
+  vaultLock: () => ipcRenderer.invoke('vault-lock'),
+  vaultList: (reveal) => ipcRenderer.invoke('vault-list', { reveal }),
+  vaultGetPassword: (id) => ipcRenderer.invoke('vault-get-password', { id }),
+  vaultSaveEntry: (entry) => ipcRenderer.invoke('vault-save-entry', entry),
+  vaultDeleteEntry: (id) => ipcRenderer.invoke('vault-delete-entry', { id }),
+  vaultChangeMaster: (currentPassword, newPassword) => ipcRenderer.invoke('vault-change-master', { currentPassword, newPassword }),
+  vaultGenerate: (length) => ipcRenderer.invoke('vault-generate', { length }),
 
   on: (channel, fn) => {
     const allowed = ['tab-created', 'tab-closed', 'tab-switched', 'tab-update', 'tab-loading',

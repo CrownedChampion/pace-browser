@@ -69,6 +69,7 @@ const bookmarksPath  = path.join(userDataPath, 'bookmarks.json');
 const downloadsPath  = path.join(userDataPath, 'downloads.json');
 const extensionsPath = path.join(userDataPath, 'extensions.json');
 const faviconsPath   = path.join(userDataPath, 'favicons.json');
+const vaultPath      = path.join(userDataPath, 'vault.json');
 
 const RENDERER = (f) => path.join(__dirname, '../renderer', f);
 
@@ -102,7 +103,41 @@ function fetchFaviconData(domain) {
 }
 function readBookmarks() {
   try { if (fs.existsSync(bookmarksPath)) return JSON.parse(fs.readFileSync(bookmarksPath, 'utf8')); } catch (e) {}
+  // If the main file is missing/corrupt, try the backup before giving up.
+  try { if (fs.existsSync(bookmarksPath + '.bak')) return JSON.parse(fs.readFileSync(bookmarksPath + '.bak', 'utf8')); } catch (e) {}
   return [];
+}
+// Atomic, guarded write: never overwrite a non-empty file with an empty/invalid array,
+// keep a .bak of the last good state, and write via temp+rename so a crash can't truncate it.
+function writeBookmarks(b) {
+  if (!Array.isArray(b)) return false;
+  try {
+    const prev = readBookmarks();
+    // Guard: if we currently have bookmarks and the incoming list is empty, treat as suspicious and skip
+    // (real "clear all" goes through clearBookmarks() which bypasses this guard intentionally).
+    if (Array.isArray(prev) && prev.length > 0 && b.length === 0) return false;
+    const data = JSON.stringify(b, null, 2);
+    const tmp = bookmarksPath + '.tmp';
+    fs.writeFileSync(tmp, data);
+    try { if (fs.existsSync(bookmarksPath)) fs.copyFileSync(bookmarksPath, bookmarksPath + '.bak'); } catch (e) {}
+    fs.renameSync(tmp, bookmarksPath);
+    return true;
+  } catch (e) { return false; }
+}
+function clearBookmarks(scope) {
+  // scope: 'all' | 'bar' | 'other'
+  try {
+    let b = readBookmarks();
+    if (scope === 'bar') b = b.filter(x => x.folder === 'other');
+    else if (scope === 'other') b = b.filter(x => x.folder !== 'other');
+    else b = [];
+    const data = JSON.stringify(b, null, 2);
+    const tmp = bookmarksPath + '.tmp';
+    fs.writeFileSync(tmp, data);
+    try { if (fs.existsSync(bookmarksPath)) fs.copyFileSync(bookmarksPath, bookmarksPath + '.bak'); } catch (e) {}
+    fs.renameSync(tmp, bookmarksPath);
+    return b;
+  } catch (e) { return readBookmarks(); }
 }
 
 // ─── Defaults ──────────────────────────────────────────────────────────────────
@@ -121,7 +156,7 @@ const defaultSettings = {
   },
   homePage: 'pace://newtab',
   adBlock: true,
-  adBlockFilters: ['doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'google-analytics.com', 'adservice.google.com', 'pagead2.googlesyndication.com', 'adnxs.com', 'scorecardresearch.com', 'adsystem.com'],
+  adBlockFilters: ['doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'google-analytics.com', 'adservice.google.com', 'pagead2.googlesyndication.com', 'adnxs.com', 'scorecardresearch.com', 'adsystem.com', 'amazon-adsystem.com', 'adsrvr.org', 'rubiconproject.com', 'pubmatic.com', 'criteo.com', 'criteo.net', 'taboola.com', 'outbrain.com', 'casalemedia.com', 'openx.net', 'moatads.com', 'serving-sys.com', 'advertising.com', 'yieldmo.com', 'sharethrough.com', 'bidswitch.net', 'adform.net', '2mdn.net', 'zedo.com', 'bluekai.com', 'demdex.net', 'krxd.net', 'quantserve.com', 'ads.yahoo.com', 'ads.linkedin.com', 'analytics.tiktok.com'],
   httpsOnly: false,
   clearOnExit: false,
   animations: true,
@@ -149,7 +184,7 @@ const defaultSettings = {
   toolbarButtons: { downloads: true, extensions: true, apps: true, history: false },
   showBookmarksBar: true,
   pinnedExtensions: [],
-  bookmarks: [],
+  autofill: true,
   extensions: [],
   downloadPath: app.getPath('downloads'),
 };
@@ -204,6 +239,21 @@ const THIN_SCROLLBAR_CSS = `
   ::-webkit-scrollbar-thumb{background:rgba(140,140,170,.45);border-radius:8px;border:3px solid transparent;background-clip:content-box}
   ::-webkit-scrollbar-thumb:hover{background:rgba(140,140,170,.75);background-clip:content-box}
   ::-webkit-scrollbar-corner{background:transparent}
+`;
+
+// Cosmetic ad hiding — hides common ad containers/iframes by selector when ad-block is on.
+// This complements network blocking (which stops the request) by removing leftover ad slots.
+const AD_HIDE_CSS = `
+  ins.adsbygoogle,
+  iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="/ads/"], iframe[id^="google_ads_"],
+  iframe[id^="aswift_"], iframe[name^="google_ads_"], iframe[aria-label="Advertisement"],
+  div[id^="div-gpt-ad"], div[id*="google_ads"], div[class*="adsbygoogle"],
+  [class*="ad-banner"], [class*="ad_banner"], [class*="adbox"], [class*="ad-container"],
+  [class*="sponsored-"], [data-ad-slot], [data-ad-client], [aria-label="Advertisement"],
+  .taboola, [id^="taboola-"], [id^="outbrain_widget"], .OUTBRAIN,
+  [id^="ad-"], [class^="GoogleActiveViewElement"]{
+    display:none !important; visibility:hidden !important; height:0 !important; min-height:0 !important;
+  }
 `;
 
 // ─── Ad block & HTTPS-only via webRequest ───────────────────────────────────────
@@ -355,6 +405,7 @@ function attachTabListeners(view, tabId) {
     const u = wc.getURL() || '';
     if (/^https?:|^file:/.test(u)) {
       wc.insertCSS(THIN_SCROLLBAR_CSS).catch(() => {});
+      try { if (loadSettings().adBlock && /^https?:/.test(u)) wc.insertCSS(AD_HIDE_CSS).catch(() => {}); } catch (e) {}
     }
   });
   wc.on('did-start-loading', () => mainWindow.webContents.send('tab-loading', { tabId, loading: true }));
@@ -374,7 +425,13 @@ function attachTabListeners(view, tabId) {
   const navUpdate = (url) => mainWindow.webContents.send('tab-update', { tabId, url: formatUrl(url), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
   wc.on('did-navigate', (e, url) => navUpdate(url));
   wc.on('did-navigate-in-page', (e, url) => navUpdate(url));
-  wc.setWindowOpenHandler(({ url }) => { createTab(url, true); return { action: 'deny' }; });
+  wc.setWindowOpenHandler(({ url, disposition }) => {
+    // Open popups, target=_blank links, and extension-created tabs (chrome-extension://) as real tabs.
+    // Foreground when the page asked for a new foreground tab; background for new-window/background.
+    const background = disposition === 'background-tab';
+    if (url && url !== 'about:blank') createTab(url, background);
+    return { action: 'deny' };
+  });
   wc.on('context-menu', (e, params) => buildPageContextMenu(view, tabId, params));
   wireMedia(wc);
   // Browser shortcuts must work even while a web page (BrowserView) holds keyboard focus
@@ -456,7 +513,7 @@ function createTab(tabUrl = 'pace://newtab', background = false) {
 }
 
 function navigateView(view, tabUrl) {
-  const map = { 'pace://newtab': 'newtab.html', 'pace://settings': 'settings.html', 'pace://downloads': 'downloads.html', 'pace://extensions': 'extensions.html', 'pace://history': 'history.html', 'pace://tos': 'tos.html', 'pace://privacy': 'privacy.html' };
+  const map = { 'pace://newtab': 'newtab.html', 'pace://settings': 'settings.html', 'pace://downloads': 'downloads.html', 'pace://extensions': 'extensions.html', 'pace://history': 'history.html', 'pace://tos': 'tos.html', 'pace://privacy': 'privacy.html', 'pace://passwords': 'passwords.html' };
   const base = (tabUrl || '').split('?')[0];
   if (map[base]) view.webContents.loadFile(RENDERER(map[base]));
   else view.webContents.loadURL(tabUrl);
@@ -465,7 +522,7 @@ function navigateView(view, tabUrl) {
 function formatUrl(u) {
   if (!u) return '';
   if (u.startsWith('file://')) {
-    const m = ['newtab', 'settings', 'downloads', 'extensions', 'history', 'tos', 'privacy'];
+    const m = ['newtab', 'settings', 'downloads', 'extensions', 'history', 'tos', 'privacy', 'passwords'];
     for (const p of m) if (u.includes(p + '.html')) return 'pace://' + p;
     return u;
   }
@@ -574,10 +631,18 @@ function preloadUrl(rawUrl, force) {
   if (s.lightResources && !force) return;   // hover-preload (force) is allowed even in Low Resources mode
   const normalized = normalizeUrl(rawUrl, s);
   if (!normalized || !/^https?:\/\//.test(normalized) || preloadViews[normalized]) return;
+  // Never preload auth/SSO/checkout style pages — many refuse to load in a hidden/background view
+  // (X-Frame-Options, backgrounding detection, OAuth state) and would adopt as a blank page.
+  if (isNoPreloadUrl(normalized)) return;
   const pv = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: true, preload: path.join(__dirname, '../preload/pagePreload.js') } });
   // keep it off-screen, tiny, never added to window so it can't steal focus/paint
-  preloadViews[normalized] = { view: pv, time: Date.now() };
-  try { pv.webContents.loadURL(normalized); } catch (e) {}
+  preloadViews[normalized] = { view: pv, time: Date.now(), ok: false, failed: false };
+  const wc = pv.webContents;
+  wc.once('did-finish-load', () => { if (preloadViews[normalized]) preloadViews[normalized].ok = true; });
+  wc.on('did-fail-load', (e, code) => { if (code !== -3 && preloadViews[normalized]) preloadViews[normalized].failed = true; });
+  // Give the preloaded page a realistic viewport so layout/paint matches a normal tab.
+  try { pv.setBounds({ x: 0, y: CHROME_H, width: 1280, height: 800 }); } catch (e) {}
+  try { wc.loadURL(normalized); } catch (e) {}
   // In Low Resources mode keep the warm-cache smaller to stay gentle on RAM
   const max = s.lightResources ? 2 : Math.max(2, s.preloadCount || 6);
   const keys = Object.keys(preloadViews).sort((a, b) => preloadViews[a].time - preloadViews[b].time);
@@ -585,6 +650,18 @@ function preloadUrl(rawUrl, force) {
     const oldest = keys.shift();
     if (preloadViews[oldest]) { try { preloadViews[oldest].view.webContents.destroy(); } catch (e) {} delete preloadViews[oldest]; }
   }
+}
+// Domains we should never warm up in the background (auth, SSO, payments).
+function isNoPreloadUrl(u) {
+  let host = '';
+  try { host = new URL(u).hostname.toLowerCase(); } catch (e) { return false; }
+  const path2 = (() => { try { return new URL(u).pathname.toLowerCase(); } catch (e) { return ''; } })();
+  const blockedHosts = ['appleid.apple.com', 'idmsa.apple.com', 'accounts.google.com', 'login.microsoftonline.com', 'login.live.com', 'signin.aws.amazon.com', 'auth0.com', 'okta.com', 'login.yahoo.com', 'id.atlassian.com'];
+  if (blockedHosts.some(h => host === h || host.endsWith('.' + h))) return true;
+  // generic auth/checkout path heuristics
+  if (/(^|\.)(login|signin|auth|account|accounts|sso|id)\./.test(host)) return true;
+  if (/\/(login|signin|sign-in|auth|oauth|checkout|payment)(\/|$|\?)/.test(path2)) return true;
+  return false;
 }
 
 function navigateTab(tabId, rawUrl) {
@@ -596,9 +673,22 @@ function navigateTab(tabId, rawUrl) {
   if (!normalized) return;
 
   if (!isInternal && preloadViews[normalized]) {
-    // Adopt the warmed-up view
-    const pv = preloadViews[normalized].view;
+    const entry = preloadViews[normalized];
     delete preloadViews[normalized];
+    const pv = entry.view;
+    let usable = false;
+    try {
+      const wc0 = pv.webContents;
+      // Usable only if it didn't fail to load and actually has a real document loaded.
+      usable = !entry.failed && !wc0.isCrashed() && !!(wc0.getURL() && wc0.getURL() !== 'about:blank');
+    } catch (e) { usable = false; }
+    if (!usable) {
+      // Throw away the dead/blank preloaded view and just navigate normally.
+      try { pv.webContents.destroy(); } catch (e) {}
+      navigateView(tabs[tid], normalized);
+      return;
+    }
+    // Adopt the warmed-up view
     const wasActive = activeTabId === tid;
     const wasDetached = tabMeta[tid].detached;
     if (wasActive && !wasDetached) mainWindow.removeBrowserView(tabs[tid]);
@@ -726,10 +816,13 @@ ipcMain.handle('set-default-browser', () => {
   let isDefault = false;
   try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch (e) {}
   try { isDefault = app.isDefaultProtocolClient('http'); } catch (e) {}
-  // Windows 10/11 requires the user to confirm in Settings — open the right page for them.
-  if (process.platform === 'win32') { try { shell.openExternal('ms-settings:defaultapps'); } catch (e) {} }
+  // Windows 10/11 require the user to confirm in Settings — deep-link straight to the default-apps
+  // page (the installer registers Pace's browser capabilities so it appears in the list there).
+  if (process.platform === 'win32') {
+    try { shell.openExternal('ms-settings:defaultapps'); } catch (e) {}
+  }
   const s = loadSettings(); s.askedDefault = true; saveSettings(s);
-  return { isDefault };
+  return { isDefault, opened: process.platform === 'win32' };
 });
 ipcMain.on('dismiss-default-prompt', () => { const s = loadSettings(); s.askedDefault = true; saveSettings(s); });
 function sendToAll(channel, payload) {
@@ -767,7 +860,8 @@ ipcMain.on('remove-history-item', (e, { url, time }) => {
 });
 
 ipcMain.handle('get-bookmarks', () => { try { if (fs.existsSync(bookmarksPath)) return JSON.parse(fs.readFileSync(bookmarksPath, 'utf8')); } catch (e) {} return []; });
-ipcMain.on('save-bookmarks', (e, b) => { try { fs.writeFileSync(bookmarksPath, JSON.stringify(b, null, 2)); } catch (e) {} });
+ipcMain.on('save-bookmarks', (e, b) => { writeBookmarks(b); });
+ipcMain.handle('clear-bookmarks', (e, { scope }) => { return clearBookmarks(scope || 'all'); });
 
 // ── Import bookmarks from other browsers / HTML export ──────────────────────────
 function otherBrowserBookmarksPath(which) {
@@ -812,7 +906,7 @@ ipcMain.handle('import-bookmarks', async (e, { source }) => {
     const seen = new Set(existing.map(b => b.url));
     let added = 0;
     for (const b of imported) { if (!seen.has(b.url)) { existing.push(b); seen.add(b.url); added++; } }
-    fs.writeFileSync(bookmarksPath, JSON.stringify(existing, null, 2));
+    try { const tmp = bookmarksPath + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(existing, null, 2)); if (fs.existsSync(bookmarksPath)) { try { fs.copyFileSync(bookmarksPath, bookmarksPath + '.bak'); } catch (e) {} } fs.renameSync(tmp, bookmarksPath); } catch (e) {}
     return { ok: true, count: added, total: imported.length };
   } catch (err) { return { ok: false, reason: String(err.message || err) }; }
 });
@@ -1033,11 +1127,32 @@ ipcMain.handle('open-extension-popup', async (e, { id }) => {
 ipcMain.handle('remove-extension', async (e, { id }) => {
   try { session.defaultSession.removeExtension(id); } catch (_) {}
   if (webStore && webStore.uninstallExtension) { try { await webStore.uninstallExtension(id, { session: session.defaultSession }); } catch (_) { try { await webStore.uninstallExtension(id); } catch (_2) {} } }
+  // Remember where it was installed so we can delete the files, then forget it.
+  const meta = extState.meta[id] || {};
+  const extDir = meta.path || '';
   delete extState.meta[id];
   extState.disabled = extState.disabled.filter(x => x !== id);
   saveExtState();
-  // also drop from the unpacked store if present
+  // Drop from the unpacked store if present
   try { writeExtStore(readExtStore().filter(x => x.id !== id && x.path !== id)); } catch (_) {}
+  // Delete the on-disk extension folder so it can't reload on next launch (only inside our managed ext dirs).
+  try {
+    if (extDir && fs.existsSync(extDir)) {
+      const managedRoots = [path.join(userDataPath, 'WebStoreExtensions'), path.join(userDataPath, 'Extensions'), path.join(userDataPath, 'extensions')].filter(Boolean);
+      if (managedRoots.some(root => extDir.startsWith(root))) {
+        fs.rmSync(extDir, { recursive: true, force: true });
+      }
+    }
+  } catch (_) {}
+  // Remove it from the pinned/favorites slots and tell the chrome to re-render.
+  try {
+    const s = loadSettings();
+    if (Array.isArray(s.pinnedExtensions) && s.pinnedExtensions.includes(id)) {
+      s.pinnedExtensions = s.pinnedExtensions.filter(x => x !== id);
+      saveSettings(s);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings-changed', { pinnedExtensions: s.pinnedExtensions });
+    }
+  } catch (_) {}
   return { ok: true };
 });
 
@@ -1060,13 +1175,320 @@ ipcMain.on('show-tab-menu', (e, { tabId }) => {
 });
 
 // ─── pace:// protocol + boot ─────────────────────────────────────────────────────
+// ─── Password manager (AES-256-GCM, scrypt KDF, zero-knowledge) ──────────────────
+// Security model:
+//  • Master password is NEVER stored. We derive a 32-byte key with scrypt (memory-hard).
+//  • A random 16-byte salt is generated per vault and stored in cleartext (salts aren't secret).
+//  • Each entry's secret fields are encrypted with AES-256-GCM using a fresh random 12-byte IV.
+//  • A "verifier" blob (encrypted known token) lets us check the master password without
+//    storing it: if it decrypts and the auth tag verifies, the password is correct.
+//  • The derived key lives in memory only while the vault is unlocked, and is wiped on lock.
+//  • All crypto happens here in the main process — the renderer never sees the key or plaintext
+//    at rest, only the decrypted entries it explicitly requests while unlocked.
+const crypto = require('crypto');
+const VAULT_VERIFIER_TOKEN = 'pace-vault-ok-v1';
+let vaultKey = null;          // Buffer(32) when unlocked, else null
+let vaultUnlocked = false;
+
+function readVault() {
+  try { if (fs.existsSync(vaultPath)) return JSON.parse(fs.readFileSync(vaultPath, 'utf8')); } catch (e) {}
+  return null;
+}
+function writeVaultFile(obj) {
+  try {
+    const tmp = vaultPath + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+    if (fs.existsSync(vaultPath)) { try { fs.copyFileSync(vaultPath, vaultPath + '.bak'); } catch (e) {} }
+    fs.renameSync(tmp, vaultPath);
+    return true;
+  } catch (e) { return false; }
+}
+function deriveKey(masterPassword, saltB64) {
+  const salt = Buffer.from(saltB64, 'base64');
+  // scrypt with strong cost params; N=2^15 balances security and unlock latency on desktop.
+  return crypto.scryptSync(String(masterPassword), salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+}
+function encryptField(plain, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return { iv: iv.toString('base64'), ct: enc.toString('base64'), tag: tag.toString('base64') };
+}
+function decryptField(blob, key) {
+  const iv = Buffer.from(blob.iv, 'base64');
+  const tag = Buffer.from(blob.tag, 'base64');
+  const ct = Buffer.from(blob.ct, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+}
+function vaultExists() { const v = readVault(); return !!(v && v.salt && v.verifier); }
+
+// Create the vault for the first time with a chosen master password.
+ipcMain.handle('vault-create', (e, { masterPassword }) => {
+  try {
+    if (vaultExists()) return { ok: false, reason: 'A vault already exists.' };
+    if (!masterPassword || String(masterPassword).length < 8) return { ok: false, reason: 'Master password must be at least 8 characters.' };
+    const salt = crypto.randomBytes(16).toString('base64');
+    const key = deriveKey(masterPassword, salt);
+    const verifier = encryptField(VAULT_VERIFIER_TOKEN, key);
+    const obj = { version: 1, kdf: 'scrypt', salt, verifier, entries: [] };
+    if (!writeVaultFile(obj)) return { ok: false, reason: 'Could not write vault.' };
+    vaultKey = key; vaultUnlocked = true;
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
+});
+
+// Unlock an existing vault.
+ipcMain.handle('vault-unlock', (e, { masterPassword }) => {
+  try {
+    const v = readVault();
+    if (!v || !v.salt || !v.verifier) return { ok: false, reason: 'No vault yet.' };
+    const key = deriveKey(masterPassword, v.salt);
+    let token = '';
+    try { token = decryptField(v.verifier, key); } catch (_) { token = ''; }
+    if (token !== VAULT_VERIFIER_TOKEN) return { ok: false, reason: 'Incorrect master password.' };
+    vaultKey = key; vaultUnlocked = true;
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: 'Incorrect master password.' }; }
+});
+
+ipcMain.handle('vault-lock', () => {
+  if (vaultKey) { try { vaultKey.fill(0); } catch (_) {} }
+  vaultKey = null; vaultUnlocked = false;
+  return { ok: true };
+});
+
+ipcMain.handle('vault-status', () => ({ exists: vaultExists(), unlocked: vaultUnlocked }));
+
+// List entries. Returns metadata always; passwords are only decrypted when reveal=true.
+ipcMain.handle('vault-list', (e, opts) => {
+  if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'Vault is locked.' };
+  const reveal = !!(opts && opts.reveal);
+  const v = readVault(); if (!v) return { ok: false, reason: 'No vault.' };
+  const out = (v.entries || []).map(en => {
+    const row = { id: en.id, site: en.site, username: en.username, url: en.url || '', updated: en.updated || 0 };
+    if (reveal) { try { row.password = decryptField(en.password, vaultKey); } catch (_) { row.password = ''; } }
+    return row;
+  });
+  return { ok: true, entries: out };
+});
+
+// Decrypt a single entry's password (used by the per-row "reveal" / copy button).
+ipcMain.handle('vault-get-password', (e, { id }) => {
+  if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'Vault is locked.' };
+  const v = readVault(); if (!v) return { ok: false, reason: 'No vault.' };
+  const en = (v.entries || []).find(x => x.id === id);
+  if (!en) return { ok: false, reason: 'Not found.' };
+  try { return { ok: true, password: decryptField(en.password, vaultKey) }; }
+  catch (_) { return { ok: false, reason: 'Decrypt failed.' }; }
+});
+
+// Add or update an entry.
+ipcMain.handle('vault-save-entry', (e, { id, site, username, password, url }) => {
+  if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'Vault is locked.' };
+  const v = readVault(); if (!v) return { ok: false, reason: 'No vault.' };
+  v.entries = v.entries || [];
+  if (id) {
+    const en = v.entries.find(x => x.id === id);
+    if (!en) return { ok: false, reason: 'Not found.' };
+    en.site = site || en.site; en.username = username || ''; en.url = url || '';
+    if (typeof password === 'string' && password.length) en.password = encryptField(password, vaultKey);
+    en.updated = Date.now();
+  } else {
+    v.entries.push({
+      id: crypto.randomUUID(), site: site || '', username: username || '', url: url || '',
+      password: encryptField(password || '', vaultKey), updated: Date.now()
+    });
+  }
+  if (!writeVaultFile(v)) return { ok: false, reason: 'Could not save.' };
+  return { ok: true };
+});
+
+ipcMain.handle('vault-delete-entry', (e, { id }) => {
+  if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'Vault is locked.' };
+  const v = readVault(); if (!v) return { ok: false, reason: 'No vault.' };
+  v.entries = (v.entries || []).filter(x => x.id !== id);
+  if (!writeVaultFile(v)) return { ok: false, reason: 'Could not save.' };
+  return { ok: true };
+});
+
+// Change the master password: re-derive a new key and re-encrypt every entry + verifier.
+ipcMain.handle('vault-change-master', (e, { currentPassword, newPassword }) => {
+  try {
+    const v = readVault();
+    if (!v) return { ok: false, reason: 'No vault.' };
+    const oldKey = deriveKey(currentPassword, v.salt);
+    let token = ''; try { token = decryptField(v.verifier, oldKey); } catch (_) {}
+    if (token !== VAULT_VERIFIER_TOKEN) return { ok: false, reason: 'Current master password is incorrect.' };
+    if (!newPassword || String(newPassword).length < 8) return { ok: false, reason: 'New master password must be at least 8 characters.' };
+    const newSalt = crypto.randomBytes(16).toString('base64');
+    const newKey = deriveKey(newPassword, newSalt);
+    const entries = (v.entries || []).map(en => {
+      let plain = ''; try { plain = decryptField(en.password, oldKey); } catch (_) { plain = ''; }
+      return { ...en, password: encryptField(plain, newKey) };
+    });
+    const obj = { version: 1, kdf: 'scrypt', salt: newSalt, verifier: encryptField(VAULT_VERIFIER_TOKEN, newKey), entries };
+    if (!writeVaultFile(obj)) return { ok: false, reason: 'Could not write vault.' };
+    vaultKey = newKey; vaultUnlocked = true;
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
+});
+
+// Generate a strong random password (used by the "generate" button).
+ipcMain.handle('vault-generate', (e, opts) => {
+  const len = Math.min(64, Math.max(8, (opts && opts.length) || 20));
+  const sets = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+[]{}';
+  const bytes = crypto.randomBytes(len);
+  let out = '';
+  for (let i = 0; i < len; i++) out += sets[bytes[i] % sets.length];
+  return { ok: true, password: out };
+});
+
+// ─── Autofill (security-critical) ────────────────────────────────────────────────
+// Trust model:
+//   • The web page NEVER supplies its own origin — we read it from event.senderFrame,
+//     which the page cannot forge. All matching is done against THAT origin.
+//   • autofill-query returns usernames only (never passwords), so a page can't scrape
+//     secrets just by being open.
+//   • autofill-fill returns a password only when (a) the vault is unlocked, (b) the user
+//     triggered it (the content script only calls it from a click handler), and (c) the
+//     requested entry's saved domain matches the requesting frame's registrable domain.
+//   • A cross-origin page can therefore only ever receive credentials that belong to it,
+//     which it would obtain anyway when the user logs in — so no cross-site exfiltration.
+function registrableDomain(host) {
+  host = String(host || '').toLowerCase().replace(/^\.+|\.+$/g, '');
+  if (!host || host === 'localhost') return host;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return host; // IPv4
+  const parts = host.split('.');
+  if (parts.length <= 2) return host;
+  // Common multi-label public suffixes so e.g. example.co.uk -> example.co.uk
+  const twoLevelTlds = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'co.jp', 'co.kr', 'co.nz', 'co.za', 'com.au', 'com.br', 'com.cn', 'com.mx', 'com.tr', 'com.sg', 'com.hk']);
+  const lastTwo = parts.slice(-2).join('.');
+  if (twoLevelTlds.has(lastTwo) && parts.length >= 3) return parts.slice(-3).join('.');
+  return lastTwo;
+}
+function frameHost(event) {
+  try {
+    const url = event && event.senderFrame ? event.senderFrame.url : '';
+    return new URL(url).hostname;
+  } catch (e) { return ''; }
+}
+function entryHost(en) {
+  try { if (en.url) return new URL(/^https?:\/\//.test(en.url) ? en.url : ('https://' + en.url)).hostname; } catch (e) {}
+  // fall back to treating the site name as a host if it looks like one
+  try { if (en.site && /\./.test(en.site)) return new URL('https://' + en.site).hostname; } catch (e) {}
+  return '';
+}
+function entriesForHost(host) {
+  const v = readVault(); if (!v) return [];
+  const rd = registrableDomain(host);
+  if (!rd) return [];
+  return (v.entries || []).filter(en => {
+    const eh = entryHost(en);
+    return eh && registrableDomain(eh) === rd;
+  });
+}
+
+// Page asks: do we have logins for this frame's site? (usernames only)
+ipcMain.handle('autofill-query', (event) => {
+  try {
+    const s = loadSettings();
+    if (s.autofill === false) return { ok: true, unlocked: vaultUnlocked, matches: [], disabled: true };
+    const host = frameHost(event);
+    if (!host) return { ok: true, unlocked: vaultUnlocked, matches: [] };
+    if (!vaultUnlocked || !vaultKey) {
+      // Tell the page whether there *would* be matches, so it can show an "unlock" hint,
+      // without revealing anything (no usernames while locked).
+      return { ok: true, unlocked: false, hasMatches: entriesForHost(host).length > 0, matches: [] };
+    }
+    const matches = entriesForHost(host).map(en => ({ id: en.id, username: en.username || '', site: en.site || '' }));
+    return { ok: true, unlocked: true, matches };
+  } catch (e) { return { ok: false, matches: [] }; }
+});
+
+// Page asks to fill a specific entry — returns the password ONLY if origin matches.
+ipcMain.handle('autofill-fill', (event, { id }) => {
+  try {
+    if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'locked' };
+    const host = frameHost(event);
+    const rd = registrableDomain(host);
+    const v = readVault(); if (!v) return { ok: false };
+    const en = (v.entries || []).find(x => x.id === id);
+    if (!en) return { ok: false };
+    // Critical: the entry's domain must match the requesting frame's domain.
+    if (!rd || registrableDomain(entryHost(en)) !== rd) return { ok: false, reason: 'origin-mismatch' };
+    let password = '';
+    try { password = decryptField(en.password, vaultKey); } catch (_) { return { ok: false }; }
+    return { ok: true, username: en.username || '', password };
+  } catch (e) { return { ok: false }; }
+});
+
+// Page offers to save a newly-entered login. Scoped to the frame's own origin.
+ipcMain.handle('autofill-save', (event, { username, password }) => {
+  try {
+    const s = loadSettings();
+    if (s.autofill === false) return { ok: false, reason: 'disabled' };
+    if (!vaultUnlocked || !vaultKey) return { ok: false, reason: 'locked' };
+    const host = frameHost(event);
+    if (!host || !password) return { ok: false };
+    const v = readVault(); if (!v) return { ok: false };
+    v.entries = v.entries || [];
+    const rd = registrableDomain(host);
+    // De-dupe: if an entry for this domain + username already exists, update its password.
+    const existing = v.entries.find(en => registrableDomain(entryHost(en)) === rd && (en.username || '') === (username || ''));
+    if (existing) {
+      existing.password = encryptField(password, vaultKey);
+      existing.updated = Date.now();
+    } else {
+      v.entries.push({
+        id: crypto.randomUUID(), site: host, username: username || '', url: 'https://' + host,
+        password: encryptField(password, vaultKey), updated: Date.now()
+      });
+    }
+    if (!writeVaultFile(v)) return { ok: false };
+    return { ok: true };
+  } catch (e) { return { ok: false }; }
+});
+
+// Lets the content script know whether autofill is enabled (it reads this on load).
+ipcMain.handle('autofill-enabled', () => {
+  try { return { enabled: loadSettings().autofill !== false }; } catch (e) { return { enabled: true }; }
+});
+
 app.whenReady().then(async () => {
   protocol.registerFileProtocol('pace', (request, callback) => {
     const page = request.url.replace('pace://', '').split('?')[0].split('/')[0];
-    const map = { newtab: 'newtab.html', settings: 'settings.html', downloads: 'downloads.html', extensions: 'extensions.html', history: 'history.html', tos: 'tos.html', privacy: 'privacy.html' };
+    const map = { newtab: 'newtab.html', settings: 'settings.html', downloads: 'downloads.html', extensions: 'extensions.html', history: 'history.html', tos: 'tos.html', privacy: 'privacy.html', passwords: 'passwords.html' };
     callback({ path: RENDERER(map[page] || 'newtab.html') });
   });
   applyNetworkRules();
+  // Permissions: allow audio/video capture, tab audio capture, and media so extensions
+  // like Shazam (which need to *hear* the page) and normal sites (mic/cam) can work.
+  try {
+    const ses = session.defaultSession;
+    const GRANT = new Set(['media', 'audioCapture', 'videoCapture', 'mediaKeySystem', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'pointerLock', 'tabCapture', 'desktopCapture']);
+    ses.setPermissionRequestHandler((wc, permission, callback) => {
+      // Notifications/geolocation/etc. fall through to allowed too, but capture is the key one.
+      callback(true);
+    });
+    ses.setPermissionCheckHandler((wc, permission) => {
+      return GRANT.has(permission) ? true : true;
+    });
+    // When a page or extension requests getDisplayMedia / tabCapture, hand back the current tab's
+    // media stream so audio recognition extensions receive the tab audio.
+    if (typeof ses.setDisplayMediaRequestHandler === 'function') {
+      ses.setDisplayMediaRequestHandler((request, callback) => {
+        try {
+          const src = (activeTabId && tabs[activeTabId]) ? tabs[activeTabId].webContents : null;
+          // Provide video of the active tab plus 'loopback' audio so the tab's sound is captured.
+          if (src) callback({ video: src, audio: 'loopback' });
+          else callback({});
+        } catch (e) { try { callback({}); } catch (_) {} }
+      }, { useSystemPicker: false });
+    }
+  } catch (e) {}
   // Enable real Chrome Web Store installs (the store's "Add" button + programmatic installs),
   // plus persistence/reload of installed extensions — the way Electron browsers do it.
   if (webStore && webStore.installChromeWebStore) {

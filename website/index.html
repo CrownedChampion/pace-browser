@@ -151,7 +151,7 @@
     <div class="band">
       <h2>Download Pace</h2>
       <p>Free for Windows. No sign-up required.</p>
-      <a class="btn btn-primary" id="download-btn" href="https://github.com/CrownedChampion/pace-browser/releases/latest/download/Pace-Setup.exe" target="_blank" rel="noopener">⬇ Download the latest version</a>
+      <a class="btn btn-primary" id="download-btn" href="https://github.com/CrownedChampion/pace-browser/releases/latest/download/Pace-Browser-Setup.exe" target="_blank" rel="noopener">⬇ Download the latest version</a>
       <div class="ver-pill">Windows 10 / 11 · 64-bit installer (.exe)</div>
     </div>
   </div>
@@ -186,6 +186,14 @@
           </select>
         </div>
         <div class="field">
+          <label for="f-name">Your name (optional)</label>
+          <input id="f-name" type="text" name="name" placeholder="Jane Doe">
+        </div>
+        <div class="field">
+          <label for="f-email">Email (optional, so we can reply)</label>
+          <input id="f-email" type="email" name="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
           <label for="f-title">Title</label>
           <input id="f-title" type="text" name="title" placeholder="Short summary" required>
         </div>
@@ -193,9 +201,9 @@
           <label for="f-msg">Details</label>
           <textarea id="f-msg" name="message" placeholder="Describe the feature or issue…" required></textarea>
         </div>
-        <button class="btn btn-primary" type="submit" id="f-submit" style="width:100%;justify-content:center">Submit on GitHub</button>
+        <button class="btn btn-primary" type="submit" id="f-submit" style="width:100%;justify-content:center">Send</button>
         <div class="form-msg" id="form-msg"></div>
-        <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--t3)">Opens a pre-filled GitHub issue (free account needed) · or email <a href="mailto:cbusinessact@proton.me" style="color:var(--t2)">cbusinessact@proton.me</a></div>
+        <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--t3)">Sent straight to the developer · or email <a href="mailto:cbusinessact@proton.me" style="color:var(--t2)">cbusinessact@proton.me</a></div>
       </form>
     </div>
   </div>
@@ -209,6 +217,8 @@
       <a href="#download">Download</a>
       <a href="#donate">Donate</a>
       <a href="#request">Request a feature</a>
+      <a href="terms.html">Terms</a>
+      <a href="privacy.html">Privacy</a>
     </div>
     <div>© 2026 That1Dev · Contact: <a href="mailto:cbusinessact@proton.me">cbusinessact@proton.me</a></div>
     <div style="margin-top:8px;color:var(--t3)">Pace is a Chromium-based browser. Not affiliated with Google.</div>
@@ -216,29 +226,54 @@
 </footer>
 
 <script>
-  // Feature/bug/feedback form -> opens a pre-filled GitHub issue (no server/token needed; safe for static hosting)
+  // Feature/bug/feedback form -> Web3Forms (emails the developer directly; no account needed for users)
+  const WEB3FORMS_KEY = 'd851bf41-06f9-4243-9e5b-f19fd1bd7c13';
   const form = document.getElementById('feature-form');
   const msg = document.getElementById('form-msg');
-  const REPO = 'CrownedChampion/pace-browser';
-  form.addEventListener('submit', (e) => {
+  const submitBtn = document.getElementById('f-submit');
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const type = form.querySelector('[name=type]').value;     // "Feature Request" | "Bug" | "Feedback"
+    msg.className = 'form-msg';
+    const type = form.querySelector('[name=type]').value;
     const userTitle = (form.querySelector('[name=title]').value || '').trim();
     const details = (form.querySelector('[name=message]').value || '').trim();
+    const name = (form.querySelector('[name=name]').value || '').trim();
+    const email = (form.querySelector('[name=email]').value || '').trim();
     if (!userTitle || !details) {
       msg.textContent = 'Please fill in both a title and details.';
       msg.className = 'form-msg err';
       return;
     }
-    const title = type + ': ' + userTitle;
-    const labelMap = { 'Feature Request': 'enhancement', 'Bug': 'bug', 'Feedback': 'feedback' };
-    const url = 'https://github.com/' + REPO + '/issues/new'
-      + '?title=' + encodeURIComponent(title)
-      + '&labels=' + encodeURIComponent(labelMap[type] || '')
-      + '&body=' + encodeURIComponent(details);
-    window.open(url, '_blank', 'noopener');
-    msg.textContent = 'Opening GitHub to submit your ' + type.toLowerCase() + '… click "Submit new issue" there to finish.';
-    msg.className = 'form-msg ok';
+    submitBtn.disabled = true; submitBtn.textContent = 'Sending…';
+    const payload = {
+      access_key: WEB3FORMS_KEY,
+      subject: type + ': ' + userTitle,
+      from_name: 'Pace Browser Website',
+      name: name || 'Anonymous',
+      email: email || 'no-reply@pacebrowser.app',
+      message: 'Type: ' + type + '\nTitle: ' + userTitle + '\n\n' + details + '\n\n— from ' + (name || 'anonymous') + (email ? ' (' + email + ')' : '')
+    };
+    try {
+      const res = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        form.reset();
+        msg.textContent = '✅ Thanks! Your ' + type.toLowerCase() + ' was sent.';
+        msg.className = 'form-msg ok';
+      } else {
+        msg.textContent = (data.message || 'Something went wrong.') + ' You can email cbusinessact@proton.me instead.';
+        msg.className = 'form-msg err';
+      }
+    } catch (err) {
+      msg.textContent = 'Network error. Please email cbusinessact@proton.me instead.';
+      msg.className = 'form-msg err';
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = 'Send';
+    }
   });
 </script>
 </body>

@@ -1,6 +1,6 @@
 {
   "name": "pace-browser",
-  "version": "1.1.1",
+  "version": "1.2.6",
   "description": "Pace Browser — Browse with extreme speed",
   "main": "src/main/main.js",
   "author": "That1Dev",

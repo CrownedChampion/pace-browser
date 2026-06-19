@@ -41,6 +41,7 @@ win:
   verifyUpdateCodeSignature: false
 
 nsis:
+  artifactName: Pace-Browser-Setup.${ext}
   oneClick: false
   perMachine: false
   allowElevation: true
@@ -50,11 +51,12 @@ nsis:
   shortcutName: Pace Browser
   deleteAppDataOnUninstall: false
   license: docs/LICENSE.txt
+  include: installer/installer.nsh
 
 # Auto-update feed. electron-updater reads the latest release from this repo.
 # IMPORTANT: set `owner` to your GitHub username (repo name can stay if you name it pace-browser).
 publish:
   provider: github
-  owner: YOUR_GITHUB_USERNAME
+  owner: CrownedChampion
   repo: pace-browser
   releaseType: release

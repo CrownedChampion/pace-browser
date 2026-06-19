@@ -645,7 +645,7 @@ async function init(){
   pace.on('window-state',({maximized})=>setMaxIcon(maximized));
   pace.on('relayout',()=>pushLayout());
   pace.on('settings-panel-closed',()=>{ if(settingsPanelOpen){ settingsPanelOpen=false; document.getElementById('settings-catch').classList.remove('on'); pushLayout(); } });
-  pace.on('settings-changed',s=>{ settings={...settings,...s}; if(s.bookmarks)bookmarks=s.bookmarks; applyAll(); applyToolbarButtons(); applyBookmarksBar(); renderPinnedExt(); });
+  pace.on('settings-changed',s=>{ settings={...settings,...s}; applyAll(); applyToolbarButtons(); applyBookmarksBar(); renderPinnedExt(); });
   pace.on('bookmark-action',({action,index})=>handleBookmarkAction(action,index));
   pace.on('bm-bar-action',p=>handleBmBarAction(p));
   pace.on('ask-default-browser',()=>showDefaultCard());

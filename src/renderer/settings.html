@@ -163,7 +163,9 @@ select option{color:#111;background:#fff}
     <div class="row"><div class="row-left"><div class="row-label">📁 Download Location</div><div class="row-sub" id="dl-path-lbl">Loading…</div></div><div class="row-right"><button class="btn btn-ghost" onclick="changeDlPath()">Change</button></div></div>
     <div class="row"><div class="row-left"><div class="row-label">📜 Browsing History</div></div><div class="row-right"><a class="about-link" onclick="navigate('pace://history')">View History</a></div></div>
     <div class="row"><div class="row-left"><div class="row-label">🧩 Extensions</div></div><div class="row-right"><a class="about-link" onclick="navigate('pace://extensions')">Manage</a></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔐 Passwords</div><div class="row-sub">Your encrypted password vault</div></div><div class="row-right"><a class="about-link" onclick="navigate('pace://passwords')">Open</a></div></div>
     <div class="row"><div class="row-left"><div class="row-label">🗑 Clear All Browsing Data</div><div class="row-sub">History, cookies, cache</div></div><div class="row-right"><button class="btn btn-danger" onclick="clearData()">Clear Now</button></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔖 Clear Bookmarks</div><div class="row-sub">Remove bookmarks from the bar, the Other folder, or everything</div></div><div class="row-right" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-ghost" onclick="clearBm('bar',this)">Clear bar</button><button class="btn btn-ghost" onclick="clearBm('other',this)">Clear other</button><button class="btn btn-danger" onclick="clearBm('all',this)">Clear all</button></div></div>
   </div>
 
   <div class="section">
@@ -243,8 +245,8 @@ async function makeDefault(){
   if(!(window.pace&&window.pace.setDefaultBrowser))return;
   const r=await window.pace.setDefaultBrowser();
   if(r&&r.isDefault) toast('Pace is now your default browser');
-  else toast('Follow the Windows prompt to finish');
-  setTimeout(refreshDefaultStatus,1200);
+  else toast('Windows Settings opened — pick Pace under "Web browser"');
+  setTimeout(refreshDefaultStatus,1500);
 }
 async function checkUpdates(){
   const sub=document.getElementById('update-sub'), btn=document.getElementById('update-btn');
@@ -323,6 +325,11 @@ async function changeDlPath(){if(!window.pace)return;const p=await window.pace.c
 async function clearData(){
   if(!confirm('Clear all browsing history, cookies and cached data? This cannot be undone.'))return;
   if(window.pace){ const ok=await window.pace.clearBrowsingData(); showSaveToast(ok?'🗑 All data cleared':'⚠ Could not clear data'); }
+}
+async function clearBm(scope,btn){
+  const labels={all:'ALL bookmarks',bar:'all bookmarks on the bar',other:'all "Other" bookmarks'};
+  if(!confirm('Remove '+labels[scope]+'? This cannot be undone.'))return;
+  if(window.pace&&window.pace.clearBookmarks){ await window.pace.clearBookmarks(scope); showSaveToast('🔖 Bookmarks cleared'); }
 }
 
 function save(){if(window.pace)window.pace.saveSettings(settings);showSaveToast('✅ Saved');}
