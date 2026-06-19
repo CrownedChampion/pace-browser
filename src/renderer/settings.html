@@ -249,13 +249,17 @@ async function makeDefault(){
   setTimeout(refreshDefaultStatus,1500);
 }
 async function checkUpdates(){
-  const sub=document.getElementById('update-sub'), btn=document.getElementById('update-btn');
+  const sub=document.getElementById('update-sub'), btn=document.getElementById('update-btn'), restart=document.getElementById('restart-row');
   if(!(window.pace&&window.pace.checkForUpdates)){ if(sub)sub.textContent='Updater unavailable in this build.'; return; }
   if(btn){btn.disabled=true;btn.textContent='Checking…';}
   if(sub)sub.textContent='Checking for updates…';
   const r=await window.pace.checkForUpdates();
   if(btn){btn.disabled=false;btn.textContent='Check for updates';}
-  if(r&&r.ok){ if(sub)sub.textContent=r.upToDate?('You’re up to date (v'+(r.version||'')+').'):('Update found: v'+r.version+' — downloading…'); }
+  if(r&&r.ok){
+    if(r.downloaded){ if(sub)sub.textContent='Update v'+(r.version||'')+' is ready — restart to install.'; if(restart)restart.style.display=''; }
+    else if(r.upToDate){ if(sub)sub.textContent='You’re on the latest version (v'+(r.version||'')+').'; }
+    else { if(sub)sub.textContent='Update found: v'+(r.version||'')+' (you have v'+(r.current||'')+') — downloading…'; }
+  }
   else if(sub)sub.textContent=(r&&r.reason)||'Could not check for updates.';
 }
 function onUpdateStatus(s){

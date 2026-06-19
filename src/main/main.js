@@ -25,6 +25,7 @@ try { ElectronChromeExtensions = require('electron-chrome-extensions').ElectronC
 let chromeExtensions = null;   // instance, created after the window exists
 // Auto-update via GitHub Releases (electron-updater). Defensive so dev runs without it still work.
 let autoUpdater = null;
+let updateDownloadedVersion = null;   // set when an update finishes downloading this session
 try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) { autoUpdater = null; }
 
 // ── Single instance + opening web files/links passed by the OS ──────────────────
@@ -526,8 +527,27 @@ function createTab(tabUrl = 'pace://newtab', background = false) {
 function navigateView(view, tabUrl) {
   const map = { 'pace://newtab': 'newtab.html', 'pace://settings': 'settings.html', 'pace://downloads': 'downloads.html', 'pace://extensions': 'extensions.html', 'pace://history': 'history.html', 'pace://tos': 'tos.html', 'pace://privacy': 'privacy.html', 'pace://passwords': 'passwords.html' };
   const base = (tabUrl || '').split('?')[0];
+  // If an extension overrides the new-tab page and the user enabled that, load the extension's page.
+  if (base === 'pace://newtab' && newtabOverrideUrl) {
+    try { view.webContents.loadURL(newtabOverrideUrl); return; } catch (e) {}
+  }
   if (map[base]) view.webContents.loadFile(RENDERER(map[base]));
   else view.webContents.loadURL(tabUrl);
+}
+
+// Track an extension that overrides the new-tab page (chrome_url_overrides.newtab).
+let newtabOverrideUrl = null;
+function refreshNewtabOverride() {
+  newtabOverrideUrl = null;
+  try {
+    const s = loadSettings();
+    if (s.useExtensionNewtab === false) return;        // user can turn this off
+    const exts = session.defaultSession.getAllExtensions ? session.defaultSession.getAllExtensions() : [];
+    for (const ext of exts) {
+      const ov = ext && ext.manifest && ext.manifest.chrome_url_overrides && ext.manifest.chrome_url_overrides.newtab;
+      if (ov) { newtabOverrideUrl = (ext.url || ('chrome-extension://' + ext.id + '/')) + ov.replace(/^\//, ''); break; }
+    }
+  } catch (e) { newtabOverrideUrl = null; }
 }
 
 function formatUrl(u) {
@@ -846,21 +866,38 @@ function sendToAll(channel, payload) {
 ipcMain.handle('check-for-updates', async () => {
   if (!autoUpdater) return { ok: false, reason: 'Updater unavailable in this build.' };
   if (!app.isPackaged) return { ok: false, reason: 'Updates only work in the installed app.' };
+  const current = app.getVersion();
+  // If an update already finished downloading this session, just offer the restart.
+  if (updateDownloadedVersion) {
+    return { ok: true, upToDate: false, downloaded: true, version: updateDownloadedVersion, current };
+  }
   try {
-    // Don't auto-download during a manual check; we decide based on version comparison.
     const prevAuto = autoUpdater.autoDownload;
     autoUpdater.autoDownload = false;
     const r = await autoUpdater.checkForUpdates();
-    const found = r && r.updateInfo && r.updateInfo.version;
-    const current = app.getVersion();
-    if (!found || found === current) {
-      autoUpdater.autoDownload = prevAuto;
-      return { ok: true, upToDate: true, version: current };
+    const latest = (r && r.updateInfo && r.updateInfo.version) || '';
+    // Decide "is there a newer version" robustly: prefer electron-updater's own flag,
+    // otherwise fall back to a real semver comparison (NOT string equality).
+    let newer = false;
+    if (r && typeof r.isUpdateAvailable === 'boolean') {
+      newer = r.isUpdateAvailable;
+    } else if (latest) {
+      try { const semver = require('semver'); newer = semver.gt(latest, current); }
+      catch (e) { newer = latest !== current; }
     }
-    // A genuinely newer version exists -> start the download now.
-    try { await autoUpdater.downloadUpdate(); } catch (e) {}
+    if (!newer) {
+      autoUpdater.autoDownload = prevAuto;
+      return { ok: true, upToDate: true, version: current, latest: latest || current };
+    }
+    // A genuinely newer version exists → download it now and surface any real error.
+    try {
+      await autoUpdater.downloadUpdate(r && r.cancellationToken);
+    } catch (e) {
+      autoUpdater.autoDownload = prevAuto;
+      return { ok: false, reason: 'Found v' + latest + ', but the download failed: ' + String(e && e.message || e), latest, current };
+    }
     autoUpdater.autoDownload = prevAuto;
-    return { ok: true, upToDate: false, version: found };
+    return { ok: true, upToDate: false, version: latest, current };
   }
   catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
 });
@@ -1086,6 +1123,7 @@ ipcMain.handle('install-from-store', async (e, { input }) => {
     let res;
     try { res = await webStore.installExtension(id, { session: session.defaultSession }); }
     catch (e1) { res = await webStore.installExtension(id); }   // tolerate either call signature
+    refreshNewtabOverride();
     return { ok: true, ext: { id: (res && res.id) || id, name: (res && res.name) || id } };
   } catch (err) { return { ok: false, reason: 'Install failed: ' + (err && err.message || err) }; }
 });
@@ -1101,6 +1139,7 @@ ipcMain.handle('install-extension-folder', async () => {
     const idx = list.findIndex(x => x.path === dir);
     if (idx >= 0) list[idx] = entry; else list.push(entry);
     writeExtStore(list);
+    refreshNewtabOverride();
     return { ok: true, ext: entry };
   } catch (e) { return { ok: false, reason: String(e.message || e) }; }
 });
@@ -1115,6 +1154,7 @@ ipcMain.handle('set-extension-enabled', async (e, { id, enabled }) => {
       if (!extState.disabled.includes(id)) extState.disabled.push(id);
     }
     saveExtState();
+    refreshNewtabOverride();
     return { ok: true };
   } catch (err) { return { ok: false, reason: String(err.message || err) }; }
 });
@@ -1173,6 +1213,7 @@ ipcMain.handle('remove-extension', async (e, { id }) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings-changed', { pinnedExtensions: s.pinnedExtensions });
     }
   } catch (_) {}
+  refreshNewtabOverride();
   return { ok: true };
 });
 
@@ -1245,36 +1286,68 @@ function decryptField(blob, key) {
 }
 function vaultExists() { const v = readVault(); return !!(v && v.salt && v.verifier); }
 
-// ── Windows Hello (scaffolding) ──────────────────────────────────────────────────
-// Real biometrics need a native module (e.g. one exposing windows.security.credentials.ui).
-// We can't build that in every environment, so the biometric step lives behind ONE function,
-// helloAuthenticate(), which you can swap for a real native call later. Everything else —
-// enabling Hello, wrapping/unwrapping the vault key, the UI — is fully wired now.
+// ── Windows Hello (real, via PowerShell + Windows Runtime UserConsentVerifier) ────
+// This triggers the actual Windows Hello dialog with NO native module and NO compiling —
+// it runs a short PowerShell script that calls the WinRT UserConsentVerifier API. If you
+// later install a native module exposing isAvailable()/requestVerification(), that's used first.
 //
-// How the key is protected: enabling Hello generates a random 32-byte "hello key", uses it to
-// AES-encrypt the master-derived vault key, and stores that wrapped blob in the vault. The hello
-// key itself is stored wrapped by a machine-bound value so it isn't sitting in plaintext. On
-// unlock we (1) require helloAuthenticate() to succeed, then (2) unwrap the vault key. Until a
-// real Hello module is installed, helloAuthenticate() returns false and the UI shows it as
-// unavailable — the master password always still works.
+// Key protection: enabling Hello generates a random 32-byte "hello key", AES-encrypts the
+// master-derived vault key with it, and stores that wrapped blob in the vault. The hello key is
+// itself wrapped with a machine-bound value so it isn't stored in plaintext. Unlock requires a
+// successful Hello verification, then unwraps the vault key. The master password always works too.
 let helloModule = null;
 try { helloModule = require('pace-windows-hello'); } catch (e) { helloModule = null; } // optional native addon
+
+// Shared PowerShell preamble that loads the WinRT type and provides an Await helper for async ops.
+const PS_HELLO_PREAMBLE = [
+  "$ErrorActionPreference='Stop'",
+  "try {",
+  "  Add-Type -AssemblyName System.Runtime.WindowsRuntime | Out-Null",
+  "  $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]",
+  "  function Await($op,$t){ $g=$asTask.MakeGenericMethod($t); $k=$g.Invoke($null,@($op)); $k.Wait(-1) | Out-Null; $k.Result }",
+  "  [void][Windows.Security.Credentials.UI.UserConsentVerifier,Windows.Security.Credentials.UI,ContentType=WindowsRuntime]"
+].join("\n");
+
+function runHelloScript(scriptBody) {
+  return new Promise((resolve) => {
+    try {
+      const { spawn } = require('child_process');
+      const tmp = path.join(os.tmpdir(), 'pace-hello-' + crypto.randomBytes(5).toString('hex') + '.ps1');
+      fs.writeFileSync(tmp, scriptBody, 'utf8');
+      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', tmp], { windowsHide: true });
+      let out = '';
+      ps.stdout.on('data', d => { out += d.toString(); });
+      ps.on('close', () => { try { fs.unlinkSync(tmp); } catch (e) {} resolve(out); });
+      ps.on('error', () => { try { fs.unlinkSync(tmp); } catch (e) {} resolve(''); });
+    } catch (e) { resolve(''); }
+  });
+}
+function lastToken(out) { return String(out || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).pop() || ''; }
 
 async function helloAvailable() {
   if (process.platform !== 'win32') return false;
   if (helloModule && typeof helloModule.isAvailable === 'function') {
-    try { return await helloModule.isAvailable(); } catch (e) { return false; }
+    try { return await helloModule.isAvailable(); } catch (e) {}
   }
-  return false; // no native module yet
+  const script = PS_HELLO_PREAMBLE + "\n"
+    + "  $a = Await ([Windows.Security.Credentials.UI.UserConsentVerifier]::CheckAvailabilityAsync()) ([Windows.Security.Credentials.UI.UserConsentVerifierAvailability])\n"
+    + "  if (\"$a\" -eq 'Available'){ Write-Output 'AVAILABLE' } else { Write-Output 'UNAVAILABLE' }\n"
+    + "} catch { Write-Output 'ERROR' }";
+  return lastToken(await runHelloScript(script)) === 'AVAILABLE';
 }
 async function helloAuthenticate(reason) {
   if (helloModule && typeof helloModule.requestVerification === 'function') {
-    try { return await helloModule.requestVerification(reason || 'Verify to unlock Pace passwords'); }
-    catch (e) { return false; }
+    try { return await helloModule.requestVerification(reason || 'Verify to unlock Pace passwords'); } catch (e) {}
   }
-  return false; // stub: biometrics unavailable until a native module is added
+  if (process.platform !== 'win32') return false;
+  const msg = String(reason || 'Unlock Pace passwords').replace(/[`'"$\r\n]/g, ' ');
+  const script = PS_HELLO_PREAMBLE + "\n"
+    + "  $r = Await ([Windows.Security.Credentials.UI.UserConsentVerifier]::RequestVerificationAsync('" + msg + "')) ([Windows.Security.Credentials.UI.UserConsentVerificationResult])\n"
+    + "  if (\"$r\" -eq 'Verified'){ Write-Output 'VERIFIED' } else { Write-Output 'FAILED' }\n"
+    + "} catch { Write-Output 'ERROR' }";
+  return lastToken(await runHelloScript(script)) === 'VERIFIED';
 }
-// Machine-bound wrap so the stored hello key isn't plaintext (best-effort without native APIs).
+// Machine-bound wrap so the stored hello key isn't plaintext.
 function machineKey() {
   const seed = [os.hostname(), os.platform(), os.arch(), (os.userInfo().username || ''), app.getPath('userData')].join('|');
   return crypto.createHash('sha256').update('pace-hello-v1|' + seed).digest();
@@ -1675,6 +1748,7 @@ app.whenReady().then(async () => {
   await loadStoredExtensions();
   syncExtMeta();                 // record paths/metadata of everything that loaded
   await applyDisabledExtensions(); // unload anything the user had disabled
+  refreshNewtabOverride();       // honor any extension that overrides the new-tab page
   createMainWindow();
 
   // If electron-chrome-extensions is installed, wire up the chrome.tabs / chrome.windows APIs so
@@ -1707,7 +1781,7 @@ app.whenReady().then(async () => {
       autoUpdater.on('update-available', (info) => sendToAll('update-status', { state: 'available', version: info && info.version }));
       autoUpdater.on('update-not-available', () => sendToAll('update-status', { state: 'none' }));
       autoUpdater.on('download-progress', (p) => sendToAll('update-status', { state: 'downloading', percent: Math.round((p && p.percent) || 0) }));
-      autoUpdater.on('update-downloaded', (info) => sendToAll('update-status', { state: 'downloaded', version: info && info.version }));
+      autoUpdater.on('update-downloaded', (info) => { updateDownloadedVersion = (info && info.version) || updateDownloadedVersion; sendToAll('update-status', { state: 'downloaded', version: info && info.version }); });
       autoUpdater.on('error', (err) => sendToAll('update-status', { state: 'error', message: String(err && err.message || err) }));
       autoUpdater.checkForUpdatesAndNotify().catch(() => {});
       setInterval(() => { try { autoUpdater.checkForUpdates().catch(() => {}); } catch (e) {} }, 6 * 60 * 60 * 1000);
