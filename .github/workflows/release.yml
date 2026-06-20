@@ -13,17 +13,28 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      # 1. Checkout into a fixed folder so paths NEVER break
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           path: app
 
+      # 2. Debug to confirm folder structure (keeps you sane)
+      - name: Debug folder structure
+        run: |
+          echo "=== RUNNER DIRECTORY ==="
+          pwd
+          echo "=== LISTING FILES ==="
+          ls -R
+
+      # 3. Node setup
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
+      # 4. Apply version from tag
       - name: Derive version from tag
         working-directory: app
         shell: bash
@@ -32,6 +43,7 @@ jobs:
           echo "Releasing version $VERSION"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
 
+      # 5. Patch electron-builder publish config
       - name: Patch electron-builder publish config
         working-directory: app
         shell: bash
@@ -41,10 +53,12 @@ jobs:
           echo "Updated publish config:"
           grep -A4 "^publish:" electron-builder.yml
 
+      # 6. Install dependencies
       - name: Install dependencies
         working-directory: app
         run: npm install
 
+      # 7. Build & publish installer
       - name: Build & publish Windows installer
         working-directory: app
         env:
