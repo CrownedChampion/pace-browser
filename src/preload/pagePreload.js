@@ -4,33 +4,73 @@
 // real websites (http/https) never receive it.
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Make the browser look like a normal Chrome to login flows (Google's "this browser or app may
-// not be secure" is triggered partly by navigator.webdriver being true in Electron). We remove
-// that flag on every page as early as possible. This runs in the isolated world but the override
-// is applied to the page's window via defineProperty so site scripts see webdriver = false.
-try {
-  if (navigator.webdriver) {
-    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-  }
-} catch (e) {}
+// ─── Make login flows treat Pace as a normal Chrome ──────────────────────────────
+// CRITICAL: with contextIsolation+sandbox, patching `navigator` in this preload's isolated
+// world does NOT change what the PAGE sees — the page has its own main-world `navigator`.
+// So we inject a <script> that runs in the page's own context and applies the fixes there.
+// This addresses Google's "this browser or app may not be secure" and the passkey prompt
+// that pops up while typing an email (Google calls credentials.get with conditional mediation).
+(function injectMainWorldShim() {
+  const code = `(() => {
+    try {
+      // 1) Hide the automation flag Google reads.
+      try { Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false, configurable: true }); } catch(e){}
+      try { Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true }); } catch(e){}
 
-// Stop the passkey/Windows-Hello prompt from popping up automatically while the user is just
-// typing their email. Sites (e.g. Google) call navigator.credentials.get({mediation:'conditional'})
-// for passkey "autofill"; in Electron that surfaces an intrusive prompt mid-typing. We reject ONLY
-// the conditional (autofill) form — explicit passkey buttons that pass mediation:'required' still work.
-try {
-  if (navigator.credentials && navigator.credentials.get) {
-    const _get = navigator.credentials.get.bind(navigator.credentials);
-    navigator.credentials.get = function (opts) {
+      // 2) Provide a believable window.chrome.runtime so headless/embedded detection passes.
+      if (!window.chrome) { window.chrome = {}; }
+      if (!window.chrome.runtime) {
+        window.chrome.runtime = { id: undefined, connect: function(){ return { onMessage:{addListener:function(){}}, postMessage:function(){}, disconnect:function(){} }; }, sendMessage: function(){}, onMessage: { addListener: function(){} } };
+      }
+      if (!window.chrome.csi) window.chrome.csi = function(){ return {}; };
+      if (!window.chrome.loadTimes) window.chrome.loadTimes = function(){ return {}; };
+      if (!window.chrome.app) window.chrome.app = { isInstalled:false, getDetails:function(){return null;}, getIsInstalled:function(){return false;}, runningState:function(){return 'cannot_run';} };
+
+      // 3) Realistic navigator surface (plugins, languages) so it doesn't look empty/headless.
+      try { if (!navigator.languages || !navigator.languages.length) Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en'] }); } catch(e){}
       try {
-        if (opts && opts.mediation === 'conditional') {
-          return new Promise(() => {}); // never resolves -> no auto prompt, no page error
+        if (!navigator.plugins || navigator.plugins.length === 0) {
+          const fake = [ { name:'Chrome PDF Plugin' }, { name:'Chrome PDF Viewer' }, { name:'Native Client' } ];
+          Object.defineProperty(navigator, 'plugins', { get: () => fake });
         }
-      } catch (e) {}
-      return _get(opts);
-    };
-  }
-} catch (e) {}
+      } catch(e){}
+
+      // 4) Stop the conditional passkey/Hello prompt that auto-opens while typing the email field.
+      //    Only the 'conditional' (autofill) form is suppressed; explicit passkey buttons still work.
+      try {
+        if (navigator.credentials && navigator.credentials.get) {
+          const _get = navigator.credentials.get.bind(navigator.credentials);
+          navigator.credentials.get = function(opts){
+            try {
+              if (opts && (opts.mediation === 'conditional' || (opts.publicKey && opts.mediation === 'conditional'))) {
+                // Return a promise that never resolves and never rejects -> no popup, no page error.
+                return new Promise(function(){});
+              }
+            } catch(e){}
+            return _get(opts);
+          };
+        }
+        // Also report conditional-mediation as unavailable so sites don't even try.
+        try {
+          if (window.PublicKeyCredential) {
+            window.PublicKeyCredential.isConditionalMediationAvailable = function(){ return Promise.resolve(false); };
+          }
+        } catch(e){}
+      } catch(e){}
+    } catch(e){}
+  })();`;
+  try {
+    const s = document.createElement('script');
+    s.textContent = code;
+    // Insert as early as possible so it runs before the page's own scripts.
+    const root = document.documentElement || document.head || document.body;
+    if (root) { root.insertBefore(s, root.firstChild); s.remove(); }
+    else {
+      // document not ready yet — run at document-start via a microtask
+      document.addEventListener('readystatechange', function once(){ const r = document.documentElement; if (r) { r.insertBefore(s, r.firstChild); s.remove(); document.removeEventListener('readystatechange', once); } }, true);
+    }
+  } catch (e) {}
+})();
 
 function isInternalPacePage() {
   try {

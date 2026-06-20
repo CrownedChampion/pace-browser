@@ -72,6 +72,7 @@ app.commandLine.appendSwitch('allow-http-screen-capture');
 // browsers it can't identify as a current mainstream browser, so the Chrome version here must be
 // recent — an old version (or anything containing "Electron") triggers "this browser may not be secure".
 const CHROME_VERSION = '131.0.0.0';
+const CHROME_MAJOR = '131';
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + CHROME_VERSION + ' Safari/537.36';
 app.userAgentFallback = CHROME_UA;
 
@@ -308,9 +309,22 @@ function applyNetworkRules() {
     }
     callback({});
   });
-}
 
-// ─── Extensions (real, via session.loadExtension) ───────────────────────────────
+  // Send the client-hint headers a real Chrome sends, and make sure no request carries an
+  // "Electron"/app token. Google's sign-in inspects Sec-CH-UA; without it (or with Electron in
+  // the UA) it refuses with "this browser or app may not be secure".
+  ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
+    const h = details.requestHeaders || {};
+    // Force a clean Chrome UA on every request (covers popups/iframes, not just the main UA).
+    if (h['User-Agent'] && /Electron|Pace/i.test(h['User-Agent'])) h['User-Agent'] = CHROME_UA;
+    if (!h['User-Agent']) h['User-Agent'] = CHROME_UA;
+    // Client hints (low-entropy set Chrome always sends).
+    h['sec-ch-ua'] = '"Google Chrome";v="' + CHROME_MAJOR + '", "Chromium";v="' + CHROME_MAJOR + '", "Not?A_Brand";v="24"';
+    h['sec-ch-ua-mobile'] = '?0';
+    h['sec-ch-ua-platform'] = '"Windows"';
+    callback({ requestHeaders: h });
+  });
+}
 function readExtStore() {
   try { if (fs.existsSync(extensionsPath)) return JSON.parse(fs.readFileSync(extensionsPath, 'utf8')); } catch (e) {}
   return [];
@@ -468,6 +482,8 @@ function createMainWindow() {
 // ─── Tab listeners (shared by new + adopted preload views) ──────────────────────
 function attachTabListeners(view, tabId) {
   const wc = view.webContents;
+  // Force a clean Chrome UA on this view (popups created from it inherit it too).
+  try { wc.setUserAgent(CHROME_UA); } catch (e) {}
   wc.on('dom-ready', () => {
     const u = wc.getURL() || '';
     if (/^https?:|^file:/.test(u)) {
