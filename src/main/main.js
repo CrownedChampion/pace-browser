@@ -993,12 +993,12 @@ ipcMain.handle('check-for-updates', async () => {
       await autoUpdater.downloadUpdate(r && r.cancellationToken);
     } catch (e) {
       autoUpdater.autoDownload = prevAuto;
-      return { ok: false, reason: 'Found v' + latest + ', but the download failed: ' + String(e && e.message || e), latest, current };
+      return { ok: false, reason: 'Found v' + latest + ', but the download failed. ' + friendlyUpdateError(e), latest, current };
     }
     autoUpdater.autoDownload = prevAuto;
     return { ok: true, upToDate: false, version: latest, current };
   }
-  catch (err) { return { ok: false, reason: String(err && err.message || err) }; }
+  catch (err) { return { ok: false, reason: friendlyUpdateError(err) }; }
 });
 ipcMain.on('quit-and-install', () => { try { if (autoUpdater) autoUpdater.quitAndInstall(); } catch (e) {} });
 
@@ -1859,6 +1859,64 @@ ipcMain.handle('autofill-hello-unlock', async () => {
   } catch (err) { return { ok: false, reason: 'Could not unlock with Hello.' }; }
 });
 
+// chrome.tabCapture polyfill injected into extension pages' MAIN world (bypassing CSP via
+// webContents.executeJavaScript). It fakes chrome.tabCapture + the getUserMedia 'tab' source and
+// routes capture to Electron's loopback audio (served by setDisplayMediaRequestHandler). This is
+// how we give audio-recognition extensions (Shazam) a working tab-audio stream despite Electron
+// having no native tabCapture. Best-effort — Electron's capture is constrained, so it may not
+// satisfy every extension or every capture trigger.
+const TAB_CAPTURE_POLYFILL = `(function(){
+  if (window.__paceTC) return; window.__paceTC = true;
+  function loopback(wantVideo){
+    return navigator.mediaDevices.getDisplayMedia({ audio:true, video: !!wantVideo }).then(function(s){
+      if(!wantVideo){ s.getVideoTracks().forEach(function(t){ try{ s.removeTrack(t); t.stop(); }catch(e){} }); }
+      return s;
+    });
+  }
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+      var g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = function(c){
+        try {
+          var a = c && c.audio;
+          var m = (a && (a.mandatory || (a.advanced && a.advanced[0]))) || a;
+          var src = m && m.chromeMediaSource;
+          var sid = m && m.chromeMediaSourceId;
+          if (src === 'tab' || (sid && String(sid).indexOf('pace-loopback')===0)){ return loopback(c && c.video); }
+        } catch(e){}
+        return g(c);
+      };
+    }
+  } catch(e){}
+  function install(){
+    if (typeof chrome === 'undefined' || !chrome) return false;
+    try {
+      chrome.tabCapture = chrome.tabCapture || {};
+      chrome.tabCapture.capture = function(opts, cb){
+        loopback(opts && opts.video).then(function(s){ if(cb) cb(s); }).catch(function(){ if(cb) cb(null); });
+      };
+      chrome.tabCapture.getMediaStreamId = function(opts, cb){
+        if (typeof opts === 'function'){ cb = opts; }
+        var id = 'pace-loopback-' + Date.now();
+        if (cb) cb(id);
+        return Promise.resolve(id);
+      };
+      if (!chrome.tabCapture.onStatusChanged) chrome.tabCapture.onStatusChanged = { addListener:function(){}, removeListener:function(){}, hasListener:function(){return false;} };
+    } catch(e){ return false; }
+    return true;
+  }
+  if (!install()){ var n=0, iv=setInterval(function(){ n++; if(install()||n>200) clearInterval(iv); }, 25); }
+})();`;
+
+// Turn raw electron-updater errors into something a human can act on.
+function friendlyUpdateError(err) {
+  const msg = String((err && err.message) || err || '');
+  if (/latest\.yml|404|Cannot find|not found|ENOTFOUND|getaddrinfo|net::|ETIMEDOUT|ECONNREFUSED/i.test(msg)) {
+    return 'Update info isn’t available right now — the newest release may still be publishing, or there may be a connection issue. Try again shortly, or download the latest version from the Pace website.';
+  }
+  return msg;
+}
+
 app.whenReady().then(async () => {
   // Electron 41: registerFileProtocol was removed; use protocol.handle (returns a web Response).
   protocol.handle('pace', (request) => {
@@ -1892,6 +1950,21 @@ app.whenReady().then(async () => {
         } catch (e) { try { callback({}); } catch (_) {} }
       }, { useSystemPicker: false });
     }
+    // Inject the tabCapture polyfill into every extension page (Shazam's offscreen/popup contexts).
+    // executeJavaScript runs in the page's MAIN world and bypasses CSP, which is what blocked all
+    // earlier injection attempts. We (re)inject on each navigation; the script self-guards.
+    app.on('web-contents-created', (e2, wc2) => {
+      const inject = () => {
+        try {
+          const u = wc2.getURL() || '';
+          if (u.indexOf('chrome-extension://') === 0) {
+            wc2.executeJavaScript(TAB_CAPTURE_POLYFILL, true).catch(() => {});
+            try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] tabCapture polyfill -> ' + u.slice(0, 90) + '\n'); } catch (_) {}
+          }
+        } catch (e) {}
+      };
+      try { wc2.on('dom-ready', inject); wc2.on('did-frame-navigate', inject); wc2.on('did-finish-load', inject); } catch (e) {}
+    });
   } catch (e) {}
   // ── Create the chrome.* extension API layer BEFORE loading any extensions ──
   // electron-chrome-extensions injects chrome.tabs / chrome.tabCapture / etc. into extension
@@ -1969,7 +2042,7 @@ app.whenReady().then(async () => {
       autoUpdater.on('update-not-available', () => sendToAll('update-status', { state: 'none' }));
       autoUpdater.on('download-progress', (p) => sendToAll('update-status', { state: 'downloading', percent: Math.round((p && p.percent) || 0) }));
       autoUpdater.on('update-downloaded', (info) => { updateDownloadedVersion = (info && info.version) || updateDownloadedVersion; sendToAll('update-status', { state: 'downloaded', version: info && info.version }); });
-      autoUpdater.on('error', (err) => sendToAll('update-status', { state: 'error', message: String(err && err.message || err) }));
+      autoUpdater.on('error', (err) => sendToAll('update-status', { state: 'error', message: friendlyUpdateError(err) }));
       autoUpdater.checkForUpdatesAndNotify().catch(() => {});
       setInterval(() => { try { autoUpdater.checkForUpdates().catch(() => {}); } catch (e) {} }, 6 * 60 * 60 * 1000);
     } catch (e) {}
