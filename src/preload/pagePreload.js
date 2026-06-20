@@ -73,14 +73,26 @@ const { contextBridge, ipcRenderer } = require('electron');
     } catch(e){}
   })();`;
   try {
-    const s = document.createElement('script');
-    s.textContent = code;
-    // Insert as early as possible so it runs before the page's own scripts.
-    const root = document.documentElement || document.head || document.body;
-    if (root) { root.insertBefore(s, root.firstChild); s.remove(); }
-    else {
-      // document not ready yet — run at document-start via a microtask
-      document.addEventListener('readystatechange', function once(){ const r = document.documentElement; if (r) { r.insertBefore(s, r.firstChild); s.remove(); document.removeEventListener('readystatechange', once); } }, true);
+    const inject = () => {
+      try {
+        const root = document.documentElement || document.head || document.body;
+        if (!root) return false;
+        const s = document.createElement('script');
+        s.textContent = code;
+        root.insertBefore(s, root.firstChild);
+        s.remove();
+        return true;
+      } catch (e) { return false; }
+    };
+    // Try immediately; if the document isn't ready yet, poll briefly until it is (still before
+    // the page's own scripts run in practice), then stop.
+    if (!inject()) {
+      let tries = 0;
+      const iv = setInterval(() => {
+        tries++;
+        if (inject() || tries > 200) clearInterval(iv);
+      }, 0);
+      document.addEventListener('DOMContentLoaded', () => { inject(); clearInterval(iv); }, true);
     }
   } catch (e) {}
 })();

@@ -328,6 +328,22 @@ function applyNetworkRules() {
     h['sec-ch-ua-platform'] = '"Windows"';
     callback({ requestHeaders: h });
   });
+
+  // Strip Content-Security-Policy on document responses. CRITICAL: Google (and other strict sites)
+  // use a CSP that blocks injected inline scripts — which silently prevented Pace's anti-detection
+  // and passkey-suppression script from EVER running on those pages. Removing CSP on the top
+  // document lets that script execute. (Trade-off: weakens CSP XSS protection on pages; acceptable
+  // for a personal browser, and required for Google sign-in to work.)
+  ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
+    if (details.resourceType === 'mainFrame' || details.resourceType === 'subFrame') {
+      const h = details.responseHeaders || {};
+      for (const k of Object.keys(h)) {
+        if (/^content-security-policy/i.test(k) || /^x-webkit-csp/i.test(k)) delete h[k];
+      }
+      return callback({ responseHeaders: h });
+    }
+    callback({});
+  });
 }
 function readExtStore() {
   try { if (fs.existsSync(extensionsPath)) return JSON.parse(fs.readFileSync(extensionsPath, 'utf8')); } catch (e) {}
