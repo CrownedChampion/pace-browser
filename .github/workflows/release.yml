@@ -13,39 +13,38 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # 1. Checkout into a fixed folder so paths NEVER break
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: app
 
-      # 2. Debug to confirm folder structure (keeps you sane)
-      - name: Debug folder structure
+      - name: Detect project root
+        id: findroot
+        shell: bash
         run: |
-          echo "=== RUNNER DIRECTORY ==="
-          pwd
-          echo "=== LISTING FILES ==="
-          ls -R
+          echo "Searching for package.json..."
+          ROOT=$(git rev-parse --show-toplevel)
+          echo "root=$ROOT" >> $GITHUB_OUTPUT
+          echo "Project root detected at: $ROOT"
 
-      # 3. Node setup
+      - name: Debug folder structure
+        run: ls -R "${{ steps.findroot.outputs.root }}"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 4. Apply version from tag
       - name: Derive version from tag
-        working-directory: app
+        working-directory: ${{ steps.findroot.outputs.root }}
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Releasing version $VERSION"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
 
-      # 5. Patch electron-builder publish config
       - name: Patch electron-builder publish config
-        working-directory: app
+        working-directory: ${{ steps.findroot.outputs.root }}
         shell: bash
         run: |
           sed -i "s|owner: .*|owner: ${{ github.repository_owner }}|" electron-builder.yml
@@ -53,14 +52,12 @@ jobs:
           echo "Updated publish config:"
           grep -A4 "^publish:" electron-builder.yml
 
-      # 6. Install dependencies
       - name: Install dependencies
-        working-directory: app
+        working-directory: ${{ steps.findroot.outputs.root }}
         run: npm install
 
-      # 7. Build & publish installer
       - name: Build & publish Windows installer
-        working-directory: app
+        working-directory: ${{ steps.findroot.outputs.root }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
