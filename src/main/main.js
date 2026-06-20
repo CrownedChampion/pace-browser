@@ -1857,6 +1857,45 @@ app.whenReady().then(async () => {
       }, { useSystemPicker: false });
     }
   } catch (e) {}
+  // ── Create the chrome.* extension API layer BEFORE loading any extensions ──
+  // electron-chrome-extensions injects chrome.tabs / chrome.tabCapture / etc. into extension
+  // contexts AS THEY LOAD. If we load extensions first (Shazam, Helix Jump, …) those APIs are
+  // missing in their background contexts, so chrome.tabs.create / chrome.tabCapture do nothing.
+  // Creating the instance first fixes that. mainWindow is referenced lazily inside the callbacks,
+  // so it's fine that it doesn't exist yet at construction time.
+  if (ElectronChromeExtensions) {
+    const extLog = (m) => { try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] ' + m + '\n'); } catch (_) {} };
+    const findTabId = (wc) => { try { return Object.keys(tabs).find(id => tabs[id] && tabs[id].webContents === wc); } catch (e) { return null; } };
+    const cfg = {
+      session: session.defaultSession,
+      createTab: (details) => {
+        try {
+          extLog('chrome.tabs.create -> ' + JSON.stringify(details || {}));
+          const id = createTab(details && details.url ? details.url : 'pace://newtab', !(details && details.active !== false));
+          const view = tabs[id];
+          return Promise.resolve([view.webContents, mainWindow]);
+        } catch (e) { extLog('createTab cb error: ' + e); return Promise.reject(e); }
+      },
+      selectTab: (tab) => { try { const id = findTabId(tab); if (id) switchTab(id); } catch (e) {} },
+      removeTab: (tab) => { try { const id = findTabId(tab); if (id) closeTab(id); } catch (e) {} },
+      createWindow: () => Promise.resolve(mainWindow),
+      removeWindow: () => {},
+      assignTabDetails: () => {},
+    };
+    const attempts = [
+      () => new ElectronChromeExtensions({ ...cfg, license: 'GPL-3.0' }),
+      () => new ElectronChromeExtensions({ ...cfg, license: 'internal-trial-do-not-distribute' }),
+      () => new ElectronChromeExtensions(cfg),
+    ];
+    for (let i = 0; i < attempts.length && !chromeExtensions; i++) {
+      try { chromeExtensions = attempts[i](); extLog('ElectronChromeExtensions initialized (pre-load) via attempt #' + (i + 1)); }
+      catch (e) { extLog('init attempt #' + (i + 1) + ' failed: ' + String(e && e.message || e)); }
+    }
+    if (!chromeExtensions) extLog('ElectronChromeExtensions FAILED to initialize — chrome.tabs/tabCapture will not work.');
+  } else {
+    try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] electron-chrome-extensions module NOT installed\n'); } catch (_) {}
+  }
+
   // Enable real Chrome Web Store installs (the store's "Add" button + programmatic installs),
   // plus persistence/reload of installed extensions — the way Electron browsers do it.
   if (webStore && webStore.installChromeWebStore) {
@@ -1877,51 +1916,12 @@ app.whenReady().then(async () => {
   refreshNewtabOverride();       // honor any extension that overrides the new-tab page
   createMainWindow();
 
-  // If electron-chrome-extensions is installed, wire up the chrome.tabs / chrome.windows APIs so
-  // extensions that open their own tabs and use the extension action APIs work. We map its tab
-  // operations onto Pace's tab system.
-  if (ElectronChromeExtensions && mainWindow) {
-    const extLog = (m) => { try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] ' + m + '\n'); } catch (_) {} };
-    const findTabId = (wc) => { try { return Object.keys(tabs).find(id => tabs[id] && tabs[id].webContents === wc); } catch (e) { return null; } };
-    const cfg = {
-      session: session.defaultSession,
-      createTab: (details) => {
-        try {
-          extLog('chrome.tabs.create -> ' + JSON.stringify(details || {}));
-          const id = createTab(details && details.url ? details.url : 'pace://newtab', !(details && details.active !== false));
-          const view = tabs[id];
-          return Promise.resolve([view.webContents, mainWindow]);
-        } catch (e) { extLog('createTab cb error: ' + e); return Promise.reject(e); }
-      },
-      selectTab: (tab) => { try { const id = findTabId(tab); if (id) switchTab(id); } catch (e) {} },
-      removeTab: (tab) => { try { const id = findTabId(tab); if (id) closeTab(id); } catch (e) {} },
-      createWindow: () => Promise.resolve(mainWindow),
-      removeWindow: () => {},
-      assignTabDetails: () => {},
-    };
-    // Different library versions accept different option shapes. Try with a license first
-    // (3.x requires it), then without (older 2.x). Log exactly which path works.
-    const attempts = [
-      () => new ElectronChromeExtensions({ ...cfg, license: 'GPL-3.0' }),
-      () => new ElectronChromeExtensions({ ...cfg, license: 'internal-trial-do-not-distribute' }),
-      () => new ElectronChromeExtensions(cfg),
-    ];
-    for (let i = 0; i < attempts.length && !chromeExtensions; i++) {
-      try { chromeExtensions = attempts[i](); extLog('ElectronChromeExtensions initialized via attempt #' + (i + 1)); }
-      catch (e) { extLog('init attempt #' + (i + 1) + ' failed: ' + String(e && e.message || e)); }
-    }
-    if (chromeExtensions) {
-      try {
-        Object.keys(tabs).forEach(id => { if (tabs[id] && tabs[id].webContents) chromeExtensions.addTab(tabs[id].webContents, mainWindow); });
-        // Mark the active tab as selected so chrome.tabs.query/getCurrent work.
-        if (activeTabId && tabs[activeTabId] && chromeExtensions.selectTab) { try { chromeExtensions.selectTab(tabs[activeTabId].webContents); } catch (e) {} }
-        extLog('registered ' + Object.keys(tabs).length + ' existing tab(s)');
-      } catch (e) { extLog('addTab error: ' + e); }
-    } else {
-      extLog('ElectronChromeExtensions FAILED to initialize on all attempts — chrome.tabs/tabCapture will not work.');
-    }
-  } else {
-    try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] electron-chrome-extensions module ' + (ElectronChromeExtensions ? 'present' : 'NOT installed') + '\n'); } catch (_) {}
+  // Now that the window exists, register the active tab(s) with the extensions API.
+  if (chromeExtensions && mainWindow) {
+    try {
+      Object.keys(tabs).forEach(id => { if (tabs[id] && tabs[id].webContents) chromeExtensions.addTab(tabs[id].webContents, mainWindow); });
+      if (activeTabId && tabs[activeTabId] && chromeExtensions.selectTab) { try { chromeExtensions.selectTab(tabs[activeTabId].webContents); } catch (e) {} }
+    } catch (e) { try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] post-window addTab error: ' + e + '\n'); } catch (_) {} }
   }
 
   // Auto-update: download in the background and install on quit; re-check periodically.
