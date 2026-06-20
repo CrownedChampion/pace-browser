@@ -10,6 +10,12 @@ on:
     tags:
       - 'v*'
 
+# Only ONE release build per tag at a time. If a tag is re-pushed, cancel the older run instead
+# of letting two runs race and produce a half-uploaded release (missing .exe / latest.yml).
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write   # needed to create the release and upload the installer
 
