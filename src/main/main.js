@@ -63,16 +63,20 @@ app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-smooth-scrolling');
 app.commandLine.appendSwitch('autoplay-policy', 'user-gesture-required');
 app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization,ParallelDownloading,SmoothScrolling');
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
+// Disable the passkey "autofill" prompt (conditional WebAuthn UI) that Chromium pops while you
+// type into a login field — this is an ENGINE feature, so it must be turned off here, not in JS.
+// Explicit "Sign in with a passkey" buttons still work; only the auto-prompt-while-typing is gone.
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors,WebAuthenticationConditionalUI,WebAuthenticationNewBleTransport');
 // Allow extensions (Shazam etc.) to capture tab audio and use getUserMedia without a fake-UI prompt.
 app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
 app.commandLine.appendSwitch('allow-http-screen-capture');
 
-// Present as plain, CURRENT Chrome (strip Electron/app tokens). Google's sign-in flow rejects
-// browsers it can't identify as a current mainstream browser, so the Chrome version here must be
-// recent — an old version (or anything containing "Electron") triggers "this browser may not be secure".
-const CHROME_VERSION = '131.0.0.0';
-const CHROME_MAJOR = '131';
+// IMPORTANT: the UA version must MATCH the real engine. Electron 28 = Chromium 120, so we claim
+// Chrome 120 — not a higher number. Google's sign-in probes for JS features that should exist in
+// the claimed version; claiming a version the engine can't back up (e.g. 131) is exactly what
+// triggers "this browser may not be secure". Matching the true engine version avoids that mismatch.
+const CHROME_VERSION = '120.0.0.0';
+const CHROME_MAJOR = '120';
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + CHROME_VERSION + ' Safari/537.36';
 app.userAgentFallback = CHROME_UA;
 
@@ -318,8 +322,8 @@ function applyNetworkRules() {
     // Force a clean Chrome UA on every request (covers popups/iframes, not just the main UA).
     if (h['User-Agent'] && /Electron|Pace/i.test(h['User-Agent'])) h['User-Agent'] = CHROME_UA;
     if (!h['User-Agent']) h['User-Agent'] = CHROME_UA;
-    // Client hints (low-entropy set Chrome always sends).
-    h['sec-ch-ua'] = '"Google Chrome";v="' + CHROME_MAJOR + '", "Chromium";v="' + CHROME_MAJOR + '", "Not?A_Brand";v="24"';
+    // Client hints (low-entropy set Chrome always sends), matched to the UA version above.
+    h['sec-ch-ua'] = '"Not_A Brand";v="8", "Chromium";v="' + CHROME_MAJOR + '", "Google Chrome";v="' + CHROME_MAJOR + '"';
     h['sec-ch-ua-mobile'] = '?0';
     h['sec-ch-ua-platform'] = '"Windows"';
     callback({ requestHeaders: h });
@@ -1857,11 +1861,15 @@ app.whenReady().then(async () => {
   createMainWindow();
 
   // If electron-chrome-extensions is installed, wire up the chrome.tabs / chrome.windows APIs so
-  // extensions that open their own tabs work. We map its tab operations onto Pace's tab system.
+  // extensions that open their own tabs and use the extension action APIs work. We map its tab
+  // operations onto Pace's tab system.
   if (ElectronChromeExtensions && mainWindow) {
     try {
       const findTabId = (wc) => { try { return Object.keys(tabs).find(id => tabs[id] && tabs[id].webContents === wc); } catch (e) { return null; } };
       chromeExtensions = new ElectronChromeExtensions({
+        // Modern versions REQUIRE a license string; without it the constructor throws and the
+        // whole extension API layer silently fails to initialize.
+        license: 'GPL-3.0',
         session: session.defaultSession,
         createTab: (details) => {
           const id = createTab(details && details.url ? details.url : 'pace://newtab', !(details && details.active !== false));
@@ -1871,11 +1879,19 @@ app.whenReady().then(async () => {
         selectTab: (tab) => { try { const id = findTabId(tab); if (id) switchTab(id); } catch (e) {} },
         removeTab: (tab) => { try { const id = findTabId(tab); if (id) closeTab(id); } catch (e) {} },
         createWindow: () => Promise.resolve(mainWindow),
+        removeWindow: () => {},
         assignTabDetails: () => {},
       });
       // Register already-open tabs so the API sees them
       try { Object.keys(tabs).forEach(id => { if (tabs[id] && tabs[id].webContents) chromeExtensions.addTab(tabs[id].webContents, mainWindow); }); } catch (e) {}
-    } catch (e) { chromeExtensions = null; }
+    } catch (e) {
+      chromeExtensions = null;
+      // Surface the real reason so we can diagnose instead of failing silently.
+      try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] ElectronChromeExtensions init failed: ' + String(e && e.stack || e) + '\n'); } catch (_) {}
+      console.error('[Pace] ElectronChromeExtensions init failed:', e);
+    }
+  } else {
+    try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] electron-chrome-extensions module ' + (ElectronChromeExtensions ? 'present' : 'NOT installed') + '\n'); } catch (_) {}
   }
 
   // Auto-update: download in the background and install on quit; re-check periodically.

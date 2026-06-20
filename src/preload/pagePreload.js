@@ -34,6 +34,19 @@ const { contextBridge, ipcRenderer } = require('electron');
           Object.defineProperty(navigator, 'plugins', { get: () => fake });
         }
       } catch(e){}
+      // 3b) Keep the client-hint JS API consistent with the UA string and the headers we send,
+      //     so there's no version/brand mismatch for sign-in to flag.
+      try {
+        const brands = [ { brand:'Not_A Brand', version:'8' }, { brand:'Chromium', version:'120' }, { brand:'Google Chrome', version:'120' } ];
+        const uaData = {
+          brands: brands,
+          mobile: false,
+          platform: 'Windows',
+          getHighEntropyValues: function(hints){ return Promise.resolve({ architecture:'x86', bitness:'64', brands:brands, fullVersionList:[ {brand:'Not_A Brand',version:'8.0.0.0'},{brand:'Chromium',version:'120.0.0.0'},{brand:'Google Chrome',version:'120.0.0.0'} ], mobile:false, model:'', platform:'Windows', platformVersion:'10.0.0', uaFullVersion:'120.0.0.0' }); },
+          toJSON: function(){ return { brands:brands, mobile:false, platform:'Windows' }; }
+        };
+        try { Object.defineProperty(navigator, 'userAgentData', { get: () => uaData, configurable: true }); } catch(e){}
+      } catch(e){}
 
       // 4) Stop the conditional passkey/Hello prompt that auto-opens while typing the email field.
       //    Only the 'conditional' (autofill) form is suppressed; explicit passkey buttons still work.
