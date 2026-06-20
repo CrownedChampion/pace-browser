@@ -68,8 +68,11 @@ app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
 app.commandLine.appendSwitch('allow-http-screen-capture');
 
-// Present as plain Chrome (strip Electron/app tokens) so sites like the Chrome Web Store don't reject us
-const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+// Present as plain, CURRENT Chrome (strip Electron/app tokens). Google's sign-in flow rejects
+// browsers it can't identify as a current mainstream browser, so the Chrome version here must be
+// recent — an old version (or anything containing "Electron") triggers "this browser may not be secure".
+const CHROME_VERSION = '131.0.0.0';
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + CHROME_VERSION + ' Safari/537.36';
 app.userAgentFallback = CHROME_UA;
 
 // ─── Paths ─────────────────────────────────────────────────────────────────────
@@ -268,6 +271,13 @@ const AD_HIDE_CSS = `
 `;
 
 // ─── Ad block & HTTPS-only via webRequest ───────────────────────────────────────
+// URL substrings that indicate ad/tracker requests regardless of host (covers first-party serving).
+const AD_URL_PATTERNS = [
+  '/pagead/', '/adsbygoogle', '/doubleclick', 'googlesyndication', 'googleadservices',
+  '/gampad/', '/gpt/', '/adservice', '/ad_status', '/getads', '/adframe', '/ad_iframe',
+  'adnxs.com', '/track?', '/pixel?', '/beacon', '/collect?', 'scorecardresearch',
+  'amazon-adsystem', '/prebid', '/openrtb', '/banners/', '/sponsor', 'taboola.com', 'outbrain.com'
+];
 function applyNetworkRules() {
   const s = loadSettings();
   const ses = session.defaultSession;
@@ -278,15 +288,22 @@ function applyNetworkRules() {
     if (s.httpsOnly && details.resourceType === 'mainFrame' && url.startsWith('http://')) {
       return callback({ redirectURL: url.replace(/^http:\/\//, 'https://') });
     }
-    if (s.adBlock && details.resourceType !== 'mainFrame' && details.resourceType !== 'media') {
+    if (s.adBlock && details.resourceType !== 'mainFrame') {
+      const lower = url.toLowerCase();
       let host = '';
       try { host = new URL(url).hostname.toLowerCase(); } catch (e) { host = ''; }
+      // 1) hostname-based domain filters (user list)
       if (host) {
         for (const f of filters) {
-          // domain-style filters: block only on a hostname match so page/media URLs that merely contain the word aren't caught
           if (f.indexOf('.') !== -1) { if (host === f || host.endsWith('.' + f)) return callback({ cancel: true }); }
           else if (host.split('.').indexOf(f) !== -1) return callback({ cancel: true });
         }
+      }
+      // 2) full-URL pattern filters (catches first-party / path-based ads), but never block media or the page itself
+      if (details.resourceType !== 'media') {
+        for (const p of AD_URL_PATTERNS) { if (lower.indexOf(p) !== -1) return callback({ cancel: true }); }
+        // user filters can also be path fragments (contain a slash) -> substring match
+        for (const f of filters) { if (f.indexOf('/') !== -1 && lower.indexOf(f) !== -1) return callback({ cancel: true }); }
       }
     }
     callback({});
@@ -301,6 +318,45 @@ function readExtStore() {
 function writeExtStore(list) {
   try { fs.writeFileSync(extensionsPath, JSON.stringify(list, null, 2)); } catch (e) {}
 }
+
+// ── Element blocker (user-picked elements to hide, saved per registrable domain) ──
+const elementBlocksPath = path.join(userDataPath, 'element-blocks.json');
+function readElementBlocks() {
+  try { if (fs.existsSync(elementBlocksPath)) return JSON.parse(fs.readFileSync(elementBlocksPath, 'utf8')); } catch (e) {}
+  return {};
+}
+function writeElementBlocks(obj) {
+  try { fs.writeFileSync(elementBlocksPath, JSON.stringify(obj, null, 2)); } catch (e) {}
+}
+function blocksForHost(host) {
+  try {
+    const rd = registrableDomain(host);
+    const all = readElementBlocks();
+    return (rd && all[rd]) ? all[rd] : [];
+  } catch (e) { return []; }
+}
+ipcMain.handle('element-block-add', (e, { host, selector }) => {
+  try {
+    if (!host || !selector) return { ok: false };
+    const rd = registrableDomain(host);
+    const all = readElementBlocks();
+    all[rd] = all[rd] || [];
+    if (!all[rd].includes(selector)) all[rd].push(selector);
+    writeElementBlocks(all);
+    return { ok: true };
+  } catch (err) { return { ok: false }; }
+});
+ipcMain.handle('element-block-list', (e, { host }) => {
+  return { ok: true, selectors: blocksForHost(host) };
+});
+ipcMain.handle('element-block-clear', (e, { host }) => {
+  try { const rd = registrableDomain(host); const all = readElementBlocks(); delete all[rd]; writeElementBlocks(all); return { ok: true }; }
+  catch (e) { return { ok: false }; }
+});
+// Tell the active tab to enter element-pick mode.
+ipcMain.on('element-pick-start', () => {
+  try { if (activeTabId && tabs[activeTabId]) tabs[activeTabId].webContents.send('pace-pick-element'); } catch (e) {}
+});
 async function loadStoredExtensions() {
   const list = readExtStore();
   for (const ext of list) {
@@ -417,6 +473,12 @@ function attachTabListeners(view, tabId) {
     if (/^https?:|^file:/.test(u)) {
       wc.insertCSS(THIN_SCROLLBAR_CSS).catch(() => {});
       try { if (loadSettings().adBlock && /^https?:/.test(u)) wc.insertCSS(AD_HIDE_CSS).catch(() => {}); } catch (e) {}
+      // Hide any elements the user blocked on this site.
+      try {
+        let host = ''; try { host = new URL(u).hostname; } catch (e) {}
+        const sels = blocksForHost(host);
+        if (sels && sels.length) wc.insertCSS(sels.join(',') + '{display:none !important}').catch(() => {});
+      } catch (e) {}
     }
   });
   wc.on('did-start-loading', () => mainWindow.webContents.send('tab-loading', { tabId, loading: true }));
@@ -1642,8 +1704,9 @@ ipcMain.handle('autofill-query', (event) => {
     if (!host) return { ok: true, unlocked: vaultUnlocked, matches: [] };
     if (!vaultUnlocked || !vaultKey) {
       // Tell the page whether there *would* be matches, so it can show an "unlock" hint,
-      // without revealing anything (no usernames while locked).
-      return { ok: true, unlocked: false, hasMatches: entriesForHost(host).length > 0, matches: [] };
+      // without revealing anything (no usernames while locked). Also whether Hello is set up.
+      const v = readVault();
+      return { ok: true, unlocked: false, hasMatches: entriesForHost(host).length > 0, helloEnabled: !!(v && v.hello), matches: [] };
     }
     const matches = entriesForHost(host).map(en => ({ id: en.id, username: en.username || '', site: en.site || '' }));
     return { ok: true, unlocked: true, matches };
@@ -1697,6 +1760,32 @@ ipcMain.handle('autofill-save', (event, { username, password }) => {
 // Lets the content script know whether autofill is enabled (it reads this on load).
 ipcMain.handle('autofill-enabled', () => {
   try { return { enabled: loadSettings().autofill !== false }; } catch (e) { return { enabled: true }; }
+});
+
+// Unlock the vault from the in-page autofill prompt (no redirect to pace://passwords).
+ipcMain.handle('autofill-unlock', (e, { masterPassword }) => {
+  try {
+    const v = readVault();
+    if (!v || !v.salt || !v.verifier) return { ok: false, reason: 'No vault yet.' };
+    const key = deriveKey(masterPassword, v.salt);
+    let token = ''; try { token = decryptField(v.verifier, key); } catch (_) {}
+    if (token !== VAULT_VERIFIER_TOKEN) return { ok: false, reason: 'Incorrect master password.' };
+    vaultKey = key; vaultUnlocked = true;
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: 'Incorrect master password.' }; }
+});
+ipcMain.handle('autofill-hello-unlock', async () => {
+  try {
+    const v = readVault();
+    if (!v || !v.hello) return { ok: false, reason: 'Hello not set up.' };
+    if (!(await helloAvailable())) return { ok: false, reason: 'Windows Hello unavailable.' };
+    const ok = await helloAuthenticate('Unlock Pace passwords');
+    if (!ok) return { ok: false, reason: 'Verification failed.' };
+    const helloKey = Buffer.from(decryptField(v.hello.wrappedHelloKey, machineKey()), 'base64');
+    vaultKey = Buffer.from(decryptField(v.hello.wrappedVaultKey, helloKey), 'base64');
+    vaultUnlocked = true;
+    return { ok: true };
+  } catch (err) { return { ok: false, reason: 'Could not unlock with Hello.' }; }
 });
 
 app.whenReady().then(async () => {

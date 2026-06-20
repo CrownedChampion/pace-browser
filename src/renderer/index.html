@@ -509,6 +509,7 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
   </div>
   <div class="qs-foot">
     <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsPasswords()">🔐 Passwords</button>
+    <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsBlockElement()">🚫 Block an element</button>
     <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsClearData(this)">🧹 Clear browsing data</button>
     <button class="qs-more" onclick="openFullSettings()">More settings →</button>
   </div>
@@ -1082,6 +1083,7 @@ function qsToggleBookmarks(el){ toggleBookmarksBarSetting(); el.classList.toggle
 function qsGlass(g){ settings.glassStrength=g; applyGlass(); pace.saveSettings(settings); syncQuickSettings(); }
 function openFullSettings(){ closeQuickSettings(); pace.navigate('pace://settings'); }
 function qsPasswords(){ closeQuickSettings(); pace.navigate('pace://passwords'); }
+function qsBlockElement(){ closeQuickSettings(); if(pace.pickElementToBlock){ pace.pickElementToBlock(); toast('Click an element to hide it · Esc to cancel'); } }
 function openSettingsPanel(){
   if(settingsPanelOpen)return;
   settingsPanelOpen=true;

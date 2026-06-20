@@ -4,6 +4,34 @@
 // real websites (http/https) never receive it.
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Make the browser look like a normal Chrome to login flows (Google's "this browser or app may
+// not be secure" is triggered partly by navigator.webdriver being true in Electron). We remove
+// that flag on every page as early as possible. This runs in the isolated world but the override
+// is applied to the page's window via defineProperty so site scripts see webdriver = false.
+try {
+  if (navigator.webdriver) {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+  }
+} catch (e) {}
+
+// Stop the passkey/Windows-Hello prompt from popping up automatically while the user is just
+// typing their email. Sites (e.g. Google) call navigator.credentials.get({mediation:'conditional'})
+// for passkey "autofill"; in Electron that surfaces an intrusive prompt mid-typing. We reject ONLY
+// the conditional (autofill) form — explicit passkey buttons that pass mediation:'required' still work.
+try {
+  if (navigator.credentials && navigator.credentials.get) {
+    const _get = navigator.credentials.get.bind(navigator.credentials);
+    navigator.credentials.get = function (opts) {
+      try {
+        if (opts && opts.mediation === 'conditional') {
+          return new Promise(() => {}); // never resolves -> no auto prompt, no page error
+        }
+      } catch (e) {}
+      return _get(opts);
+    };
+  }
+} catch (e) {}
+
 function isInternalPacePage() {
   try {
     const loc = window.location || {};
@@ -193,11 +221,54 @@ else if (window.top === window) {
 
       if (!q.unlocked) {
         if (!q.hasMatches) { removeDropdown(); return; }
-        const row = document.createElement('div');
-        row.textContent = '🔒 Unlock Pace to fill saved logins';
-        row.style.cssText = 'padding:11px 14px;cursor:pointer;color:#9d9dc8';
-        row.addEventListener('mousedown', (e) => { e.preventDefault(); ipcRenderer.send('navigate', { url: 'pace://passwords' }); removeDropdown(); });
-        dropdown.appendChild(row);
+        // In-page unlock: master password (and Hello if available) right here, no redirect.
+        const head = document.createElement('div');
+        head.textContent = '🔒 Unlock Pace to fill';
+        head.style.cssText = 'padding:10px 14px;font-size:12px;color:#f1f1fb;border-bottom:1px solid rgba(255,255,255,.08)';
+        dropdown.appendChild(head);
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'padding:12px 14px;display:flex;flex-direction:column;gap:8px';
+        const inp = document.createElement('input');
+        inp.type = 'password'; inp.placeholder = 'Master password';
+        inp.style.cssText = 'width:100%;box-sizing:border-box;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:#0e0e16;color:#f1f1fb;padding:0 10px;font-size:13px;outline:none';
+        // keep clicks/keys inside our UI from bubbling to the page
+        ['mousedown','click','keydown','keyup','keypress'].forEach(ev => inp.addEventListener(ev, e => e.stopPropagation()));
+        const err = document.createElement('div');
+        err.style.cssText = 'color:#f0556e;font-size:11.5px;min-height:0;display:none';
+        const btn = document.createElement('button');
+        btn.textContent = 'Unlock & fill';
+        btn.style.cssText = 'height:36px;border:none;border-radius:8px;cursor:pointer;background:linear-gradient(135deg,#5b8ef0,#a78bfa);color:#fff;font-size:13px;font-family:inherit';
+        const doUnlock = async () => {
+          const pw = inp.value;
+          if (!pw) return;
+          btn.textContent = 'Unlocking…'; btn.disabled = true;
+          const u = await ipcRenderer.invoke('autofill-unlock', { masterPassword: pw });
+          if (u && u.ok) { removeDropdown(); showSuggestions(pwField); }
+          else { err.textContent = (u && u.reason) || 'Incorrect password.'; err.style.display = 'block'; btn.textContent = 'Unlock & fill'; btn.disabled = false; inp.select(); }
+        };
+        btn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); doUnlock(); });
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doUnlock(); } });
+        wrap.appendChild(inp); wrap.appendChild(err); wrap.appendChild(btn);
+
+        // Optional Windows Hello button
+        if (q.helloEnabled) {
+          const hbtn = document.createElement('button');
+          hbtn.textContent = '👋 Use Windows Hello';
+          hbtn.style.cssText = 'height:36px;border:1px solid rgba(255,255,255,.16);border-radius:8px;cursor:pointer;background:rgba(255,255,255,.06);color:#f1f1fb;font-size:13px;font-family:inherit';
+          hbtn.addEventListener('mousedown', async (e) => {
+            e.preventDefault(); e.stopPropagation();
+            hbtn.textContent = 'Waiting for Hello…'; hbtn.disabled = true;
+            const u = await ipcRenderer.invoke('autofill-hello-unlock');
+            if (u && u.ok) { removeDropdown(); showSuggestions(pwField); }
+            else { err.textContent = (u && u.reason) || 'Hello failed.'; err.style.display = 'block'; hbtn.textContent = '👋 Use Windows Hello'; hbtn.disabled = false; }
+          });
+          wrap.appendChild(hbtn);
+        }
+        dropdown.appendChild(wrap);
+        document.body.appendChild(dropdown);
+        setTimeout(() => { try { inp.focus(); } catch (e) {} }, 30);
+        return;
       } else if (q.matches && q.matches.length) {
         const head = document.createElement('div');
         head.textContent = 'Pace · saved logins';
@@ -289,6 +360,68 @@ else if (window.top === window) {
         }
       }, true);
       window.addEventListener('scroll', removeDropdown, true);
+
+      // ── Element blocker / picker ──
+      let picking = false, hi = null;
+      function cssSelector(el) {
+        if (!el || el === document.body) return 'body';
+        if (el.id && /^[A-Za-z][\w-]*$/.test(el.id)) return '#' + el.id;
+        let path = [];
+        let node = el;
+        while (node && node.nodeType === 1 && node !== document.body && path.length < 5) {
+          let part = node.tagName.toLowerCase();
+          const cls = (node.className && typeof node.className === 'string')
+            ? node.className.trim().split(/\s+/).filter(c => /^[A-Za-z][\w-]*$/.test(c)).slice(0, 2) : [];
+          if (cls.length) part += '.' + cls.join('.');
+          else {
+            const parent = node.parentNode;
+            if (parent) { const idx = Array.prototype.indexOf.call(parent.children, node) + 1; part += ':nth-child(' + idx + ')'; }
+          }
+          path.unshift(part);
+          if (node.id && /^[A-Za-z][\w-]*$/.test(node.id)) { path.unshift('#' + node.id); break; }
+          node = node.parentNode;
+        }
+        return path.join(' > ');
+      }
+      function ensureHi() {
+        if (hi) return hi;
+        hi = document.createElement('div');
+        hi.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;background:rgba(91,142,240,.25);border:2px solid #5b8ef0;border-radius:4px;transition:all .05s';
+        document.documentElement.appendChild(hi);
+        return hi;
+      }
+      function onPickMove(e) {
+        if (!picking) return;
+        const el = e.target; if (!el) return;
+        const r = el.getBoundingClientRect();
+        const h = ensureHi();
+        h.style.left = r.left + 'px'; h.style.top = r.top + 'px'; h.style.width = r.width + 'px'; h.style.height = r.height + 'px';
+      }
+      function stopPicking() {
+        picking = false;
+        document.removeEventListener('mousemove', onPickMove, true);
+        document.removeEventListener('click', onPickClick, true);
+        document.removeEventListener('keydown', onPickKey, true);
+        if (hi && hi.parentNode) hi.parentNode.removeChild(hi); hi = null;
+      }
+      async function onPickClick(e) {
+        if (!picking) return;
+        e.preventDefault(); e.stopPropagation();
+        const el = e.target;
+        const sel = cssSelector(el);
+        try { el.style.setProperty('display', 'none', 'important'); } catch (err) {}
+        try { await ipcRenderer.invoke('element-block-add', { host: location.hostname, selector: sel }); } catch (err) {}
+        stopPicking();
+      }
+      function onPickKey(e) { if (e.key === 'Escape') { e.preventDefault(); stopPicking(); } }
+      function startPicking() {
+        if (picking) return;
+        picking = true;
+        document.addEventListener('mousemove', onPickMove, true);
+        document.addEventListener('click', onPickClick, true);
+        document.addEventListener('keydown', onPickKey, true);
+      }
+      ipcRenderer.on('pace-pick-element', () => startPicking());
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
