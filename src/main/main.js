@@ -473,7 +473,8 @@ function createMainWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, '../preload/preload.js'),
-      sandbox: false,
+      sandbox: true,   // REQUIRED for electron-chrome-extensions MV3 service worker preloads to run
+                       // (sandbox:false here silently breaks every MV3 extension's background)
     },
     icon: path.join(__dirname, '../assets/icons/icon.ico'),
     show: false,
@@ -566,7 +567,9 @@ function attachTabListeners(view, tabId) {
     else if (ctrl && k === 't') createTab('pace://newtab');
     else if (ctrl && k === 'w') { if (activeTabId) closeTab(activeTabId); }
     else if (ctrl && (k === 'l')) { mainWindow.webContents.focus(); mainWindow.webContents.send('app-shortcut', { action: 'focus-address' }); }
-    else if (ctrl && k === ',') mainWindow.webContents.send('app-shortcut', { action: 'settings' });
+    else if (ctrl && (k === ',' || k === 'e')) mainWindow.webContents.send('app-shortcut', { action: 'settings' });
+    else if (ctrl && k === 'h') mainWindow.webContents.send('app-shortcut', { action: 'history' });
+    else if (ctrl && k === 'j') mainWindow.webContents.send('app-shortcut', { action: 'downloads' });
     else if (ctrl && k === 'd') mainWindow.webContents.send('app-shortcut', { action: 'bookmark' });
     else if ((ctrl && k === 'r') || k === 'f5') { if (tabs[activeTabId]) tabs[activeTabId].webContents.reload(); }
     else if (ctrl && k === 'tab') mainWindow.webContents.send('app-shortcut', { action: shift ? 'prev-tab' : 'next-tab' });
@@ -1153,6 +1156,7 @@ ipcMain.on('show-other-bookmarks', (e) => {
 });
 ipcMain.handle('normalize-url', (e, { url }) => normalizeUrl(url, loadSettings()));
 ipcMain.on('reopen-closed-tab', () => reopenClosedTab());
+ipcMain.on('toggle-fullscreen', () => { try { mainWindow.setFullScreen(!mainWindow.isFullScreen()); } catch (e) {} });
 
 ipcMain.on('media-close', () => {
   if (sidebarView && mediaWC === sidebarView.webContents) {

@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('pace', {
   normalizeUrl: (url) => ipcRenderer.invoke('normalize-url', { url }),
   getSuggestions: (query) => ipcRenderer.invoke('search-suggestions', { query }),
   reopenClosedTab: () => ipcRenderer.send('reopen-closed-tab'),
+  toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
   ready: () => ipcRenderer.send('chrome-ready'),
   mediaControl: (action) => ipcRenderer.send('media-control', { action }),
   mediaClose: () => ipcRenderer.send('media-close'),

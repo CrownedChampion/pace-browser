@@ -682,6 +682,8 @@ function handleAppShortcut(action){
   if(action==='toggle-bookmarks') toggleBookmarksBarSetting();
   else if(action==='focus-address'){ const a=document.getElementById('addr'); if(a){a.focus();a.select();} }
   else if(action==='settings') pace.navigate('pace://settings');
+  else if(action==='history') pace.navigate('pace://history');
+  else if(action==='downloads') toggleDownloads();
   else if(action==='bookmark') toggleBookmarkCurrent();
   else if(action==='next-tab'||action==='prev-tab'){ const ids=Object.keys(tabs).map(Number); if(ids.length<2)return; let i=ids.indexOf(activeTabId); i=(action==='next-tab')?(i+1)%ids.length:(i-1+ids.length)%ids.length; pace.switchTab(ids[i]); }
 }
@@ -718,6 +720,7 @@ function bindKeys(){
     else if(ctrl&&e.key==='j'){e.preventDefault();toggleDownloads();}
     else if(ctrl&&e.key==='d'){e.preventDefault();toggleBookmarkCurrent();}
     else if(ctrl&&(e.key===','||e.key==='e')){e.preventDefault();pace.navigate('pace://settings');}
+    else if(e.key==='F11'){e.preventDefault();pace.toggleFullscreen&&pace.toggleFullscreen();}
     else if(e.key==='Escape'){closeOverlays();}
   });
 }
@@ -865,31 +868,37 @@ function bindTabEvents(){
 function renderTabs(){
   const list=document.getElementById('tab-list');
   const arr=Object.values(tabs);
-  const ids=arr.map(t=>t.tabId);
-  const existing=[...list.querySelectorAll('.tab')];
   const favHtmlFor=t=>(t.url&&t.url.startsWith('pace://'))?tabIconFor(t):(t.favicon?'<img src="'+esc(t.favicon)+'" onerror="this.style.display=\'none\'">':tabIconFor(t));
-  const sameSet = ids.length===existing.length && ids.every((id,i)=>+existing[i].dataset.id===id);
-  if(sameSet){
-    // Same tabs in the same order: update in place. A full innerHTML rebuild on every switch was
-    // recreating the active tab's element, which made its glow/indicator flicker and disappear.
-    arr.forEach((t,i)=>{
-      const el=existing[i];
-      el.classList.toggle('active',t.tabId===activeTabId);
-      el.classList.toggle('loading',!!t.loading);
-      const titleEl=el.querySelector('.tab-title'); const want=t.title||'New Tab';
-      if(titleEl&&titleEl.textContent!==want)titleEl.textContent=want;
-      const favEl=el.querySelector('.tab-fav'); const fav=favHtmlFor(t);
-      if(favEl&&el._favSig!==fav){favEl.innerHTML=fav;el._favSig=fav;}
-    });
-    updatePlusButton();
-    return;
-  }
-  list.innerHTML=arr.map(t=>'<div class="tab'+(t.tabId===activeTabId?' active':'')+(t.loading?' loading':'')+'" data-id="'+t.tabId+'"><span class="tab-fav">'+favHtmlFor(t)+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>').join('');
-  list.querySelectorAll('.tab').forEach(el=>{
+  function makeEl(t){
+    const el=document.createElement('div');
+    el.className='tab'+(t.tabId===activeTabId?' active':'')+(t.loading?' loading':'');
+    el.dataset.id=t.tabId;
+    el.innerHTML='<span class="tab-fav">'+favHtmlFor(t)+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>';
+    el._favSig=favHtmlFor(t);
     el.addEventListener('click',e=>{ if(e.target.closest('[data-close]'))return; pace.switchTab(+el.dataset.id); });
     el.addEventListener('contextmenu',e=>{ e.preventDefault(); pace.showTabMenu(+el.dataset.id); });
     el.addEventListener('auxclick',e=>{ if(e.button===1){e.preventDefault();pace.closeTab(+el.dataset.id);} });
     const x=el.querySelector('[data-close]'); if(x)x.addEventListener('click',e=>{e.stopPropagation();pace.closeTab(+x.dataset.close);});
+    return el;
+  }
+  // Remove only the elements whose tab is gone — never touch the others (so the active tab's
+  // highlight is never destroyed and re-created, which was the source of the flicker).
+  const want=new Set(arr.map(t=>String(t.tabId)));
+  [...list.querySelectorAll('.tab')].forEach(el=>{ if(!want.has(el.dataset.id)) el.remove(); });
+  // Get-or-create each tab element, update it in place, and put it at the right position.
+  arr.forEach((t,idx)=>{
+    let el=list.querySelector('.tab[data-id="'+t.tabId+'"]');
+    if(!el){ el=makeEl(t); }
+    else {
+      el.classList.toggle('active',t.tabId===activeTabId);
+      el.classList.toggle('loading',!!t.loading);
+      const titleEl=el.querySelector('.tab-title'); const wantTitle=t.title||'New Tab';
+      if(titleEl&&titleEl.textContent!==wantTitle)titleEl.textContent=wantTitle;
+      const favEl=el.querySelector('.tab-fav'); const fav=favHtmlFor(t);
+      if(favEl&&el._favSig!==fav){favEl.innerHTML=fav;el._favSig=fav;}
+    }
+    const cur=list.children[idx];
+    if(cur!==el) list.insertBefore(el, cur||null);
   });
   updatePlusButton();
 }
