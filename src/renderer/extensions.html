@@ -89,31 +89,12 @@ a.lnk{color:var(--acc);cursor:pointer;text-decoration:none}a.lnk:hover{text-deco
       <div class="cta-ico">📂</div>
       <div><div class="cta-t">Load Unpacked Extension</div><div class="cta-s">Pick a folder containing manifest.json</div></div>
     </div>
-    <div class="cta" onclick="openStore()">
-      <div class="cta-ico">🛒</div>
-      <div><div class="cta-t">Open Chrome Web Store ↗</div><div class="cta-s">Browse thousands of extensions</div></div>
-    </div>
-  </div>
-
-  <div class="store-install">
-    <div class="si-label">⚡ Install directly from the Chrome Web Store</div>
-    <div class="si-row">
-      <input id="store-input" placeholder="Paste a Chrome Web Store link or 32-character extension ID" spellcheck="false">
-      <button id="store-btn" onclick="installFromStore()">Install</button>
-    </div>
-    <div id="store-status" class="si-status"></div>
-  </div>
-
-  <div class="tabs">
-    <button class="tab-btn active" id="tab-installed" onclick="showTab('installed')">Installed</button>
-    <button class="tab-btn" id="tab-featured" onclick="showTab('featured')">Featured</button>
   </div>
 
   <div id="pane-installed"><div class="ext-grid" id="installed-list"></div></div>
-  <div id="pane-featured" style="display:none"><div class="ext-grid" id="featured-list"></div></div>
 
   <div class="note-card">
-    <b>How installing works.</b> Pace now uses a real Chrome Web Store integration: open the store, find an extension, and click <b>Add to Chrome</b> just like in any other browser — or paste a store link / ID above and hit Install. Extensions download, verify, and load automatically, and persist across restarts. Most content and ad-blocking extensions work; some that depend on Chrome-only APIs may not load, and extension toolbar buttons/popups have limited support in the engine. You can also <b>Load Unpacked</b> a folder with a manifest.json.
+    <b>How extensions work in Pace — the honest version.</b> Pace loads <b>unpacked extensions</b>: a folder that contains a <code>manifest.json</code> (the same folder a Chrome extension uses once unzipped). There is no Chrome Web Store in Pace. What actually works: <b>content-script extensions</b> (ad/content blockers, page restylers, dark-mode tools, auto-scrollers) and extensions whose features live in their popup or injected scripts — these run well. What is limited: most modern extensions are <b>Manifest V3</b> and keep their core logic in a background <b>service worker</b>, and Electron's support for extension service workers is incomplete — so an MV3 extension that depends on its background may show “failed to load” or only partly work. Anything using Chrome-only APIs (e.g. <code>tabCapture</code>) will not work. <b>Rule of thumb:</b> if an extension mainly changes web pages, it'll likely work; if it needs a constantly-running background, it may not. Want to build one that's guaranteed to work? See the developer guide in the project README.
   </div>
 </div>
 
@@ -145,7 +126,7 @@ async function init(){
     if(s.accentColor2){document.documentElement.style.setProperty('--acc2',s.accentColor2);}
     installed=await window.pace.getExtensions()||[];
   }
-  renderInstalled(); renderFeatured();
+  renderInstalled();
 }
 function showTab(t){
   ['installed','featured'].forEach(id=>{document.getElementById('pane-'+id).style.display=id===t?'block':'none';document.getElementById('tab-'+id).classList.toggle('active',id===t);});

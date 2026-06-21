@@ -15,8 +15,7 @@ try {
 } catch (e) {}
 // Purpose-built Chrome Web Store support for Electron (download + CRX verify + install + reload).
 // Loaded defensively so the app still launches if the dependency isn't installed yet.
-let webStore = null;
-try { webStore = require('electron-chrome-web-store'); } catch (e) { webStore = null; }
+let webStore = null;   // Chrome Web Store support REMOVED in 1.5.1 — Pace loads unpacked (folder) extensions only.
 // Optional: electron-chrome-extensions implements the chrome.tabs / chrome.windows APIs so
 // extensions that open their own tabs work. It needs a native-ish install (npm install
 // electron-chrome-extensions); if absent we fall back to the window-open handler below.
@@ -263,15 +262,31 @@ const THIN_SCROLLBAR_CSS = `
 // Cosmetic ad hiding — hides common ad containers/iframes by selector when ad-block is on.
 // This complements network blocking (which stops the request) by removing leftover ad slots.
 const AD_HIDE_CSS = `
-  ins.adsbygoogle,
-  iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="/ads/"], iframe[id^="google_ads_"],
-  iframe[id^="aswift_"], iframe[name^="google_ads_"], iframe[aria-label="Advertisement"],
-  div[id^="div-gpt-ad"], div[id*="google_ads"], div[class*="adsbygoogle"],
-  [class*="ad-banner"], [class*="ad_banner"], [class*="adbox"], [class*="ad-container"],
-  [class*="sponsored-"], [data-ad-slot], [data-ad-client], [aria-label="Advertisement"],
-  .taboola, [id^="taboola-"], [id^="outbrain_widget"], .OUTBRAIN,
-  [id^="ad-"], [class^="GoogleActiveViewElement"]{
-    display:none !important; visibility:hidden !important; height:0 !important; min-height:0 !important;
+  /* Google AdSense / GPT / DoubleClick */
+  ins.adsbygoogle, .adsbygoogle,
+  iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="googleads"], iframe[src*="/ads/"], iframe[src*="/ad/"],
+  iframe[id^="google_ads_"], iframe[id^="aswift_"], iframe[name^="google_ads_"], iframe[name^="aswift_"],
+  div[id^="div-gpt-ad"], div[id*="google_ads"], div[id^="gpt-"], div[class*="adsbygoogle"],
+  [data-ad-slot], [data-ad-client], [data-google-query-id], [data-ad-status], [data-adsbygoogle-status],
+  [class^="GoogleActiveViewElement"],
+  /* Generic ad containers — kept SPECIFIC so they never match words like header/thread/download/loading */
+  [class*="ad-banner"], [class*="ad_banner"], [class*="adbanner"], [class*="ad-slot"], [class*="ad_slot"],
+  [class*="ad-container"], [class*="ad_container"], [class*="ad-wrapper"], [class*="ad_wrapper"],
+  [class*="ad-placeholder"], [class*="adbox"], [class*="ad-box"], [class*="ad-unit"], [class*="ad_unit"],
+  [class*="ad-region"], [class*="ad-zone"], [class*="adzone"], [class*="ad-block__"], [class*="advert-"],
+  [class*="sponsored-"], [class*="-sponsored"], [class*="sponsored_"], [class*="advertisement"], [class*="adsbox"],
+  [id^="ad-"], [id$="-ad"], [id*="-ad-"], [id^="ads-"], [id*="-ads-"], [id^="banner-ad"], [id^="adunit"], [id*="_ad_"],
+  [aria-label="Advertisement"], [aria-label="Ad"], [aria-label="advertisement"],
+  /* Native ad / content-recommendation networks */
+  .taboola, [id^="taboola-"], [class*="trc_related"], [id^="outbrain_widget"], .OUTBRAIN, [data-widget-id^="ob_"],
+  [id^="rc_"], .mgbox, [id^="mgid"], [class*="mgid"], [class*="revcontent"], [class*="content-ad"],
+  [class*="sticky-ad"], [class*="ad-sticky"], [class*="leaderboard-ad"], [class*="ad-leaderboard"], [class*="sidebar-ad"],
+  /* YouTube — display/promoted/banner ads ONLY (never the video player) */
+  #masthead-ad, #player-ads, ytd-display-ad-renderer, ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer,
+  ytd-promoted-video-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, ytd-banner-promo-renderer-background,
+  ytd-statement-banner-renderer, ytd-companion-slot-renderer, ad-slot-renderer, .ytp-ad-overlay-container, .ytp-ad-overlay-slot,
+  ytd-rich-item-renderer:has(ytd-ad-slot-renderer) {
+    display:none !important;
   }
 `;
 
@@ -281,7 +296,19 @@ const AD_URL_PATTERNS = [
   '/pagead/', '/adsbygoogle', '/doubleclick', 'googlesyndication', 'googleadservices',
   '/gampad/', '/gpt/', '/adservice', '/ad_status', '/getads', '/adframe', '/ad_iframe',
   'adnxs.com', '/track?', '/pixel?', '/beacon', '/collect?', 'scorecardresearch',
-  'amazon-adsystem', '/prebid', '/openrtb', '/banners/', '/sponsor', 'taboola.com', 'outbrain.com'
+  'amazon-adsystem', '/prebid', '/openrtb', '/banners/', '/sponsor', 'taboola.com', 'outbrain.com',
+  // Programmatic ad exchanges / SSPs / DSPs
+  'criteo.com', 'criteo.net', 'rubiconproject', 'pubmatic.com', 'casalemedia', 'openx.net', 'openx.com',
+  'adform.net', 'adroll.com', 'media.net', 'mgid.com', 'revcontent', 'zedo.com', 'bidswitch.net',
+  'smartadserver', 'yieldmo.com', 'sharethrough', 'teads.tv', 'indexww.com', 'gumgum.com', '33across.com',
+  'sonobi.com', '3lift.com', 'sovrn.com', 'lijit.com', 'contextweb.com', 'spotxchange', 'adsrvr.org',
+  'adsystem.com', 'adsterra', 'popads.net', 'propellerads', 'adcash', 'exoclick', 'adtech',
+  // Ad verification / viewability
+  'moatads.com', 'adsafeprotected', 'doubleverify', '/popunder', '/interstitial-ad', '/advert',
+  // Analytics / behaviour trackers (privacy)
+  'scorecardresearch.com', 'quantserve.com', 'quantcount.com', 'hotjar.com', 'mouseflow.com',
+  'fullstory.com', 'clarity.ms', 'mc.yandex.ru', 'bat.bing.com', 'analytics.tiktok.com',
+  'google-analytics.com/g/collect', 'google-analytics.com/collect', 'facebook.com/tr'
 ];
 function applyNetworkRules() {
   const s = loadSettings();
@@ -473,8 +500,8 @@ function createMainWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, '../preload/preload.js'),
-      sandbox: true,   // REQUIRED for electron-chrome-extensions MV3 service worker preloads to run
-                       // (sandbox:false here silently breaks every MV3 extension's background)
+      sandbox: false,   // Must stay off — sandbox:true broke startup (Pace wouldn't open).
+                        // Trade-off: MV3 extension service workers won't run (documented honestly).
     },
     icon: path.join(__dirname, '../assets/icons/icon.ico'),
     show: false,
@@ -1236,7 +1263,7 @@ ipcMain.handle('get-extensions', () => {
 ipcMain.handle('install-from-store', async (e, { input }) => {
   const id = (String(input || '').match(/[a-p]{32}/i) || [])[0];
   if (!id) return { ok: false, reason: 'Could not find a 32-character extension ID in that link.' };
-  if (!webStore || !webStore.installExtension) return { ok: false, reason: 'Extension installer unavailable — run "npm install" and rebuild.' };
+  if (!webStore || !webStore.installExtension) return { ok: false, reason: 'Installing by ID/link from the Chrome Web Store is no longer supported in Pace. Use “Load Unpacked” to add an extension folder instead.' };
   try {
     let res;
     try { res = await webStore.installExtension(id, { session: session.defaultSession }); }
@@ -2024,20 +2051,8 @@ app.whenReady().then(async () => {
     try { fs.appendFileSync(path.join(userDataPath, 'pace-extensions.log'), '[' + new Date().toISOString() + '] electron-chrome-extensions module NOT installed\n'); } catch (_) {}
   }
 
-  // Enable real Chrome Web Store installs (the store's "Add" button + programmatic installs),
-  // plus persistence/reload of installed extensions — the way Electron browsers do it.
-  if (webStore && webStore.installChromeWebStore) {
-    try {
-      await webStore.installChromeWebStore({
-        session: session.defaultSession,
-        extensionsPath: path.join(userDataPath, 'WebStoreExtensions'),
-        loadExtensions: true,
-        autoUpdate: false,
-        allowUnpackedExtensions: true,
-        minimumManifestVersion: 2,
-      });
-    } catch (e) { console.error('Web Store init failed:', e); }
-  }
+  // Chrome Web Store support was removed. Pace loads unpacked extensions from a folder
+  // (Load Unpacked) and re-loads previously added folders on startup.
   await loadStoredExtensions();
   syncExtMeta();                 // record paths/metadata of everything that loaded
   await applyDisabledExtensions(); // unload anything the user had disabled

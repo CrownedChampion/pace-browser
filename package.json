@@ -1,6 +1,6 @@
 {
   "name": "pace-browser",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Pace Browser — Browse with extreme speed",
   "main": "src/main/main.js",
   "author": "That1Dev",
@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "electron-chrome-extensions": "latest",
-    "electron-chrome-web-store": "latest",
     "electron-updater": "^6.3.0"
   }
 }
