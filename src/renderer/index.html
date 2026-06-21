@@ -508,6 +508,7 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
     <div class="swatches" id="qs-swatches2"></div>
   </div>
   <div class="qs-foot">
+    <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsShare(this)">🔗 Share this page</button>
     <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsPasswords()">🔐 Passwords</button>
     <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsBlockElement()">🚫 Block an element</button>
     <button class="qs-more" style="margin-bottom:8px;background:var(--glass-2,rgba(255,255,255,.05));border-color:var(--glass-line);color:var(--t1)" onclick="qsClearData(this)">🧹 Clear browsing data</button>
@@ -863,7 +864,27 @@ function bindTabEvents(){
 
 function renderTabs(){
   const list=document.getElementById('tab-list');
-  list.innerHTML=Object.values(tabs).map(t=>'<div class="tab'+(t.tabId===activeTabId?' active':'')+(t.loading?' loading':'')+'" data-id="'+t.tabId+'"><span class="tab-fav">'+((t.url&&t.url.startsWith('pace://'))?tabIconFor(t):(t.favicon?'<img src="'+esc(t.favicon)+'" onerror="this.style.display=\'none\'">':tabIconFor(t)))+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>').join('');
+  const arr=Object.values(tabs);
+  const ids=arr.map(t=>t.tabId);
+  const existing=[...list.querySelectorAll('.tab')];
+  const favHtmlFor=t=>(t.url&&t.url.startsWith('pace://'))?tabIconFor(t):(t.favicon?'<img src="'+esc(t.favicon)+'" onerror="this.style.display=\'none\'">':tabIconFor(t));
+  const sameSet = ids.length===existing.length && ids.every((id,i)=>+existing[i].dataset.id===id);
+  if(sameSet){
+    // Same tabs in the same order: update in place. A full innerHTML rebuild on every switch was
+    // recreating the active tab's element, which made its glow/indicator flicker and disappear.
+    arr.forEach((t,i)=>{
+      const el=existing[i];
+      el.classList.toggle('active',t.tabId===activeTabId);
+      el.classList.toggle('loading',!!t.loading);
+      const titleEl=el.querySelector('.tab-title'); const want=t.title||'New Tab';
+      if(titleEl&&titleEl.textContent!==want)titleEl.textContent=want;
+      const favEl=el.querySelector('.tab-fav'); const fav=favHtmlFor(t);
+      if(favEl&&el._favSig!==fav){favEl.innerHTML=fav;el._favSig=fav;}
+    });
+    updatePlusButton();
+    return;
+  }
+  list.innerHTML=arr.map(t=>'<div class="tab'+(t.tabId===activeTabId?' active':'')+(t.loading?' loading':'')+'" data-id="'+t.tabId+'"><span class="tab-fav">'+favHtmlFor(t)+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>').join('');
   list.querySelectorAll('.tab').forEach(el=>{
     el.addEventListener('click',e=>{ if(e.target.closest('[data-close]'))return; pace.switchTab(+el.dataset.id); });
     el.addEventListener('contextmenu',e=>{ e.preventDefault(); pace.showTabMenu(+el.dataset.id); });
@@ -1083,6 +1104,14 @@ function qsToggleBookmarks(el){ toggleBookmarksBarSetting(); el.classList.toggle
 function qsGlass(g){ settings.glassStrength=g; applyGlass(); pace.saveSettings(settings); syncQuickSettings(); }
 function openFullSettings(){ closeQuickSettings(); pace.navigate('pace://settings'); }
 function qsPasswords(){ closeQuickSettings(); pace.navigate('pace://passwords'); }
+function qsShare(btn){
+  const url=currentUrl||(tabs[activeTabId]&&tabs[activeTabId].url)||'';
+  if(!url||url==='pace://newtab'){ if(btn){const o=btn.innerHTML;btn.innerHTML='Nothing to share';setTimeout(()=>btn.innerHTML=o,1300);} return; }
+  let ok=false;
+  try{ navigator.clipboard.writeText(url); ok=true; }catch(e){}
+  if(!ok){ try{ const ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();ok=true;}catch(e){} }
+  if(btn){ const o=btn.innerHTML; btn.innerHTML=ok?'✓ Link copied!':'Couldn’t copy'; setTimeout(()=>btn.innerHTML=o,1400); }
+}
 function qsBlockElement(){ closeQuickSettings(); if(pace.pickElementToBlock){ pace.pickElementToBlock(); toast('Click an element to hide it · Esc to cancel'); } }
 function openSettingsPanel(){
   if(settingsPanelOpen)return;

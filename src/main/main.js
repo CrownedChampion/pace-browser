@@ -393,11 +393,24 @@ ipcMain.on('element-pick-start', () => {
 });
 async function loadStoredExtensions() {
   const list = readExtStore();
+  // The Web Store init already loads extensions from its own folder. Loading the SAME extension a
+  // second time corrupts its MV3 service worker registration (popup opens but background "fails to
+  // load"). Skip anything already loaded.
+  let loadedPaths = new Set();
+  try {
+    const ses = session.defaultSession;
+    const existing = (ses.extensions && ses.extensions.getAllExtensions) ? ses.extensions.getAllExtensions()
+                    : (ses.getAllExtensions ? ses.getAllExtensions() : []);
+    for (const e of (existing || [])) { try { loadedPaths.add(path.resolve(e.path)); } catch (_) { if (e.path) loadedPaths.add(e.path); } }
+  } catch (e) {}
   for (const ext of list) {
     if (ext.enabled && ext.path && fs.existsSync(ext.path)) {
+      let resolved = ext.path; try { resolved = path.resolve(ext.path); } catch (_) {}
+      if (loadedPaths.has(resolved)) { continue; }   // already loaded — don't double-load
       try {
         const loaded = await session.defaultSession.loadExtension(ext.path, { allowFileAccess: true });
         ext.id = loaded.id; ext.runtimeName = loaded.name;
+        loadedPaths.add(resolved);
       } catch (e) { ext.error = String(e.message || e); }
     }
   }
@@ -672,6 +685,8 @@ function switchTab(tabId) {
 function closeTab(tabId) {
   if (!tabs[tabId]) return;
   const wasActive = activeTabId === tabId;
+  const orderBefore = Object.keys(tabs).map(Number);
+  const idx = orderBefore.indexOf(tabId);
   // Remember the closed tab's URL so it can be reopened (skip blank/new tabs)
   try {
     const u = formatUrl(tabs[tabId].webContents.getURL());
@@ -683,7 +698,7 @@ function closeTab(tabId) {
   mainWindow.webContents.send('tab-closed', { tabId });
   if (wasActive) {
     const ids = Object.keys(tabs).map(Number);
-    if (ids.length) switchTab(ids[ids.length - 1]);
+    if (ids.length) switchTab(ids[Math.max(0, idx - 1)]);   // go to the neighbor (prefer the left one)
     else { activeTabId = null; createTab('pace://newtab'); }
   }
   ensureTab();

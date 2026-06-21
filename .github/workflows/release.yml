@@ -51,6 +51,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Reset & pre-create the GitHub release
+        # electron-builder 26 races with itself when creating the release: parallel upload tasks
+        # each try to create it -> "422 already_exists" kills the run, leaving a half-uploaded
+        # release (only the blockmap, no .exe / latest.yml). We create the release ourselves first
+        # (deleting any stale one for this tag), so electron-builder ONLY uploads to it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release delete "${GITHUB_REF_NAME}" --yes 2>/dev/null || true
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Pace Browser ${GITHUB_REF_NAME}"
+
       - name: Build & publish (Windows x64)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
