@@ -81,6 +81,9 @@ app.userAgentFallback = CHROME_UA;
 
 // ─── Paths ─────────────────────────────────────────────────────────────────────
 const userDataPath   = app.getPath('userData');
+// Pace Addon runtime (Phase 1) — loads native Pace Addons from <userData>/PaceAddons.
+const addons = require('./addons');
+try { addons.init({ userDataPath, appPath: app.getAppPath() }); } catch (e) {}
 const settingsPath   = path.join(userDataPath, 'settings.json');
 const historyPath    = path.join(userDataPath, 'history.json');
 const bookmarksPath  = path.join(userDataPath, 'bookmarks.json');
@@ -349,6 +352,16 @@ function applyNetworkRules() {
         // user filters can also be path fragments (contain a slash) -> substring match
         for (const f of filters) { if (f.indexOf('/') !== -1 && lower.indexOf(f) !== -1) return callback({ cancel: true }); }
       }
+      // 3) Pace Addon block rules (third-party only, same first-party safety as above).
+      try {
+        const ar = addons.networkRules();
+        if (host && ar.hosts.length) {
+          for (const f of ar.hosts) { if (host === f || host.endsWith('.' + f)) return callback({ cancel: true }); }
+        }
+        if (details.resourceType !== 'media' && ar.patterns.length) {
+          for (const p of ar.patterns) { if (lower.indexOf(p) !== -1) return callback({ cancel: true }); }
+        }
+      } catch (e) {}
     }
     callback({});
   });
@@ -431,6 +444,11 @@ ipcMain.on('element-pick-start', () => {
   try { if (activeTabId && tabs[activeTabId]) tabs[activeTabId].webContents.send('pace-pick-element'); } catch (e) {}
 });
 async function loadStoredExtensions() {
+  // Unpacked Chrome-extension loading was removed in 1.5.3 — Chrome MV3 extensions can't run on
+  // Pace's engine (their background service worker won't start), so they only ever half-worked.
+  // Pace Addons replace them. This is intentionally a no-op; the Addon Shop manages Pace Addons.
+  return;
+  /* eslint-disable no-unreachable */
   const list = readExtStore();
   // The Web Store init already loads extensions from its own folder. Loading the SAME extension a
   // second time corrupts its MV3 service worker registration (popup opens but background "fails to
@@ -567,6 +585,12 @@ function attachTabListeners(view, tabId) {
         let host = ''; try { host = new URL(u).hostname; } catch (e) {}
         const sels = blocksForHost(host);
         if (sels && sels.length) wc.insertCSS(sels.join(',') + '{display:none !important}').catch(() => {});
+      } catch (e) {}
+      // Pace Addons: inject their cosmetic CSS + content scripts on pages they match.
+      try {
+        const acss = addons.cssForUrl(u);
+        if (acss && acss.trim()) wc.insertCSS(acss).catch(() => {});
+        for (const code of addons.contentScriptsForUrl(u)) { try { wc.executeJavaScript(code).catch(() => {}); } catch (e) {} }
       } catch (e) {}
     }
   });
@@ -1287,6 +1311,27 @@ ipcMain.handle('share-page', async (e, payload) => {
     }
   } catch (e2) {}
   try { clipboard.writeText(url); return { ok: true, method: 'copy' }; } catch (e3) { return { ok: false, method: 'none' }; }
+});
+
+// ─── Pace Addon Shop ───
+ipcMain.handle('get-addons', () => { try { return addons.list(); } catch (e) { return []; } });
+ipcMain.handle('set-addon-enabled', (e, { id, enabled }) => { try { return addons.setEnabled(id, enabled); } catch (err) { return { ok: false }; } });
+ipcMain.handle('remove-addon', (e, { id }) => { try { return addons.remove(id); } catch (err) { return { ok: false, reason: 'Failed to remove addon.' }; } });
+ipcMain.handle('install-addon-folder', async () => {
+  try {
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Select a Pace Addon folder (the folder containing addon.json)', properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, reason: 'cancelled' };
+    // SECURITY: anything installed outside the official Pace Addon Shop gets an explicit warning,
+    // because an addon can read and modify every page you visit.
+    const confirm = await dialog.showMessageBox(mainWindow, {
+      type: 'warning', buttons: ['Cancel', 'Install anyway'], defaultId: 0, cancelId: 0, noLink: true,
+      title: 'Install an addon from outside the Pace Addon Shop?',
+      message: 'This addon is not from the official Pace Addon Shop.',
+      detail: 'Pace Addons can read and change the pages you visit. Only install addons from sources you trust.\n\nThe official, reviewed addons are at paceaddonshop.thestripedfox.workers.dev.'
+    });
+    if (confirm.response !== 1) return { ok: false, reason: 'cancelled' };
+    return addons.installFromFolder(r.filePaths[0]);
+  } catch (e) { return { ok: false, reason: 'Install failed.' }; }
 });
 
 ipcMain.handle('clear-browsing-data', async () => {

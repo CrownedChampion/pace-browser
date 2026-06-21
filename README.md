@@ -23,94 +23,76 @@ Pace updates itself automatically when a new version is published.
 
 ---
 
-## 🧩 Extensions in Pace
+## 🧩 Pace Addons (not Chrome extensions)
 
-Pace is built on Electron, not on Chromium directly. That has one important consequence you should
-understand before building or installing extensions:
+Pace does **not** run Chrome extensions. Modern extensions are Manifest V3 and keep their core logic
+in a background **service worker**, which cannot run on Pace's Electron engine — so they only ever
+half-loaded. Instead, Pace has its own native addon format: the **Pace Addon**.
 
-- ✅ **What works well:** extensions whose features run as **content scripts** (ad/content blockers,
-  page restylers, dark-mode tools, on-page widgets) or in a **popup**. These are fully supported.
-- ⚠️ **What is limited:** most modern **Manifest V3** extensions keep their core logic in a
-  background **service worker**. Electron's support for extension service workers is incomplete, so
-  an MV3 extension that depends on its background may fail to load or only partly work.
-- ❌ **What does not work:** Chrome-only APIs such as `chrome.tabCapture`, and anything that needs a
-  always-running background service worker.
+Manage and install addons from **`pace://extensions`** (the Pace Addon Shop), or browse reviewed
+addons at **paceaddonshop.thestripedfox.workers.dev**. Addons installed from outside the official Shop
+show a security warning first.
 
-There is **no Chrome Web Store** in Pace. You add extensions by loading an **unpacked folder**.
+## 👩‍💻 Developer guide — building a Pace Addon
 
-### Installing an extension
-1. Open **`pace://extensions`** (Menu → Extensions).
-2. Click **Load Unpacked**.
-3. Select a folder that contains a `manifest.json`.
-
-The extension loads immediately and is re-loaded automatically on every launch.
-
----
-
-## 👩‍💻 Developer guide — building an extension that works in Pace
-
-The most reliable extensions for Pace are **content-script** and **popup** based. Here is a minimal
-working example.
+A Pace Addon is a folder with an `addon.json` manifest. The browser drives it directly, so there is
+**no service worker** to fight. Three capabilities are supported today: cosmetic CSS, content scripts,
+and network block rules.
 
 **Folder layout**
 ```
-my-extension/
-├── manifest.json
-├── content.js
-└── popup.html
+my-addon/
+├── addon.json
+├── content.js   (optional)
+├── style.css    (optional)
+└── icon.png     (optional)
 ```
 
-**manifest.json**
+**addon.json**
 ```json
 {
-  "manifest_version": 3,
-  "name": "My Pace Extension",
+  "id": "my-addon",
+  "name": "My Addon",
   "version": "1.0.0",
-  "description": "Does something useful on web pages.",
-  "permissions": ["activeTab", "storage"],
+  "description": "What it does.",
+  "author": "You",
+  "permissions": ["cosmetic", "content", "network"],
+  "matches": ["<all_urls>"],
+
+  "hide": [".some-banner", "#promo"],
+
+  "block": ["/ads/", "/sponsor/"],
+  "block_hosts": ["tracker.example.com"],
+
   "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
-  "action": { "default_popup": "popup.html" }
+    { "matches": ["*://*.example.com/*"], "js": ["content.js"], "css": ["style.css"], "run_at": "document_idle" }
+  ]
 }
 ```
 
-**content.js** (runs on every page — this is the part Pace runs reliably)
+**What each field does**
+- `matches` — which pages the addon applies to. `"<all_urls>"` means every http(s)/file page; you can
+  also use globs like `"*://*.example.com/*"`.
+- `hide` — CSS selectors to hide (the element is collapsed with `display:none`). Great for cosmetic
+  ad/element blocking.
+- `block` — URL substrings to block at the network level (third-party requests only, so a site's own
+  resources are never blocked).
+- `block_hosts` — hostnames to block (matches the host and its subdomains, third-party only).
+- `content_scripts` — JavaScript/CSS injected into matching pages. `content.js` runs in the page and
+  can read and modify the DOM.
+
+**content.js example**
 ```js
-// Example: add a small badge to every page.
-const badge = document.createElement('div');
-badge.textContent = 'Loaded in Pace';
-badge.style.cssText =
-  'position:fixed;bottom:12px;right:12px;z-index:2147483647;padding:6px 10px;' +
-  'background:#5b8ef0;color:#fff;border-radius:8px;font:12px sans-serif';
-document.body.appendChild(badge);
+// Runs on every matching page.
+document.querySelectorAll('.newsletter-popup').forEach(el => el.remove());
 ```
 
-**popup.html**
-```html
-<!doctype html>
-<html><body style="width:220px;font:14px sans-serif;padding:12px">
-  <h3>My Pace Extension</h3>
-  <p>Popup UI goes here.</p>
-</body></html>
-```
+**Install it:** `pace://extensions` → **Install from folder…** → pick the addon folder. (You'll get a
+security prompt because it's outside the official Shop — that's expected for local installs.)
 
-### Guidelines for reliability
-- **Do** put your logic in `content_scripts` and/or the popup.
-- **Do** use `chrome.storage` and `chrome.runtime` messaging between popup and content scripts.
-- **Avoid** relying on a background **service worker** for core behaviour — it may not run.
-- **Avoid** `chrome.tabCapture`, `chrome.debugger`, and other Chrome-only/privileged APIs.
-- **Test in Pace**, not just Chrome — if it changes pages, it'll almost certainly work; if it needs
-  a persistent background, verify before shipping.
+> Coming next: background pages (a real persistent page, not a service worker) and toolbar popups.
+> These manifest fields (`background`, `popup`) are reserved and read today, but not yet executed.
 
-> A first-party **Pace Addon** format (designed to run natively, with no service-worker limitations)
-> is planned. When it ships, this guide will be updated with the new format.
-
----
 
 ## 📬 Contact
 

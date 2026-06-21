@@ -1,180 +1,131 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Extensions — Pace</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pace Addon Shop</title>
 <style>
-:root{
-  --acc:#5b8ef0;--acc2:#a78bfa;--glow:rgba(91,142,240,.2);
-  --bg:#0a0a12;
-  --glass:rgba(28,29,46,.55);--glass-2:rgba(40,42,66,.62);--glass-hi:rgba(255,255,255,.09);
-  --border:rgba(255,255,255,.08);--hover:rgba(255,255,255,.08);
-  --t1:#f1f1fb;--t2:#9d9dc8;--t3:#5c5c7e;
-  --font:'Segoe UI Variable','Segoe UI',-apple-system,'Inter',system-ui,sans-serif;
-  --r-sm:9px;--r-md:14px;--r-lg:18px;--r-pill:999px;--ease:cubic-bezier(.22,.8,.32,1);--blur:30px;--sat:170%;
-}
-body.light{--bg:#eef1fb;--glass:rgba(255,255,255,.62);--glass-2:rgba(255,255,255,.74);--glass-hi:rgba(255,255,255,.85);--border:rgba(20,24,60,.1);--hover:rgba(20,24,60,.06);--t1:#13132b;--t2:#4f5388;--t3:#9a9ec4}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font);background:var(--bg);color:var(--t1);min-height:100vh;transition:background .25s}
-#ambient{position:fixed;inset:0;overflow:hidden;pointer-events:none}
-#ambient::before,#ambient::after{content:'';position:absolute;border-radius:50%;filter:blur(80px);opacity:.4}
-#ambient::before{width:48vw;height:48vw;left:-8vw;top:-12vw;background:radial-gradient(circle,var(--acc),transparent 70%)}
-#ambient::after{width:42vw;height:42vw;right:-10vw;bottom:-10vw;background:radial-gradient(circle,var(--acc2),transparent 70%)}
-.page{position:relative;z-index:1;max-width:740px;margin:0 auto;padding:44px 24px 80px}
-.ph{display:flex;align-items:center;gap:14px;margin-bottom:22px}
-.ph-icon{width:46px;height:46px;background:linear-gradient(135deg,var(--acc),var(--acc2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:23px;flex-shrink:0}
-.ph-title{font-size:25px;font-weight:700}.ph-sub{font-size:13px;color:var(--t2);margin-top:2px}
-.cta-row{display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap}
-.cta{flex:1;min-width:200px;padding:16px 18px;border-radius:var(--r-md);cursor:pointer;display:flex;align-items:center;gap:13px;
-  background:var(--glass);-webkit-backdrop-filter:blur(var(--blur)) saturate(var(--sat));backdrop-filter:blur(var(--blur)) saturate(var(--sat));
-  border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--glass-hi);transition:all .18s var(--ease)}
-.cta:hover{transform:translateY(-2px);border-color:var(--acc)}
-.cta-ico{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--glow);flex-shrink:0}
-.cta-t{font-size:14px;font-weight:700}.cta-s{font-size:11px;color:var(--t2);margin-top:2px}
-.tabs{display:flex;gap:3px;padding:3px;margin-bottom:18px;width:fit-content;border-radius:var(--r-pill);background:var(--glass);border:1px solid var(--border)}
-.tab-btn{padding:7px 18px;border-radius:var(--r-pill);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--t2);background:transparent;border:none;font-family:var(--font)}
-.tab-btn.active{background:var(--glass-2);color:var(--t1);box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.ext-grid{display:grid;gap:10px}
-.ext-card{padding:16px;border-radius:var(--r-md);display:flex;align-items:center;gap:14px;
-  background:var(--glass);-webkit-backdrop-filter:blur(var(--blur)) saturate(var(--sat));backdrop-filter:blur(var(--blur)) saturate(var(--sat));
-  border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--glass-hi);transition:border-color .15s}
-.ext-card:hover{border-color:var(--glow)}
-.ext-ph{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--hover);flex-shrink:0;overflow:hidden}
-.ext-ph img{width:34px;height:34px;object-fit:contain;display:block}
-.ext-info{flex:1;min-width:0}
-.ext-name{font-size:14px;font-weight:600;margin-bottom:3px}
-.ext-desc{font-size:12px;color:var(--t2);margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.ext-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ext-rating,.ext-users{font-size:10px;color:var(--t3)}
-.ext-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:var(--r-pill);background:rgba(55,207,131,.12);border:1px solid rgba(55,207,131,.3);color:#37cf83}
-.ext-badge.path{background:var(--hover);border-color:var(--border);color:var(--t3);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ext-badge.warn{background:rgba(255,189,46,.1);border-color:rgba(255,189,46,.3);color:#ffbd2e}
-.ext-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.toggle{width:40px;height:22px;background:var(--hover);border-radius:var(--r-pill);position:relative;cursor:pointer;transition:background .25s;border:1.5px solid var(--border);flex-shrink:0}
-.toggle.on{background:var(--acc);border-color:var(--acc)}
-.toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .25s var(--ease)}
-.toggle.on::after{transform:translateX(18px)}
-.btn-store{padding:7px 16px;border-radius:var(--r-pill);background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;font-family:var(--font);transition:opacity .15s;flex-shrink:0;white-space:nowrap}
-.btn-store:hover{opacity:.9}
-.btn-rm{width:28px;height:28px;border-radius:50%;background:transparent;border:1px solid var(--border);color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .15s}
-.btn-rm:hover{background:rgba(255,60,60,.12);color:#ff5560;border-color:rgba(255,60,60,.3)}
-.empty{text-align:center;padding:46px;color:var(--t3)}.empty-ico{font-size:44px;margin-bottom:12px;opacity:.25}
-.note-card{padding:16px 18px;border-radius:var(--r-md);background:var(--glass);border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--glass-hi);font-size:12px;color:var(--t2);line-height:1.6;margin-top:14px}
-.note-card b{color:var(--t1)}
-a.lnk{color:var(--acc);cursor:pointer;text-decoration:none}a.lnk:hover{text-decoration:underline}
-#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);border-radius:var(--r-pill);padding:11px 24px;font-size:13px;font-weight:600;z-index:99;opacity:0;pointer-events:none;transition:opacity .25s;background:var(--glass-2);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border:1px solid var(--acc);box-shadow:0 10px 30px rgba(0,0,0,.4)}
-#toast.show{opacity:1}
-.store-install{padding:16px 18px;border-radius:var(--r-md);background:var(--glass);border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--glass-hi);margin-bottom:22px}
-.si-label{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--t1)}
-.si-row{display:flex;gap:8px}
-#store-input{flex:1;background:rgba(127,127,127,.10);border:1.5px solid var(--border);color:var(--t1);font-family:inherit;font-size:13px;padding:9px 12px;border-radius:10px;outline:none}
-#store-input:focus{border-color:var(--acc)}
-#store-btn{background:var(--acc);color:#fff;border:none;font-family:inherit;font-size:13px;font-weight:600;padding:9px 18px;border-radius:10px;cursor:pointer;transition:opacity .15s,transform .1s}
-#store-btn:hover{opacity:.9}#store-btn:active{transform:scale(.96)}#store-btn:disabled{opacity:.5;cursor:default}
-.si-status{font-size:12px;margin-top:9px;color:var(--t2);min-height:14px}
-.si-or{font-size:11px;color:var(--t3);margin-top:8px}
-.si-status.ok{color:#37cf83}.si-status.err{color:#ff6b6b}
+  :root{
+    --bg:#0b0b12; --t1:#f3f4fb; --t2:#a7abbd; --acc:#5b8ef0; --acc2:#a78bfa;
+    --glass:rgba(255,255,255,.045); --glass-2:rgba(255,255,255,.07); --line:rgba(255,255,255,.10);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,Segoe UI,Roboto,system-ui,sans-serif;color:var(--t1);
+    background:radial-gradient(1200px 600px at 20% -10%,rgba(91,142,240,.16),transparent),
+               radial-gradient(900px 500px at 110% 10%,rgba(167,139,250,.13),transparent),var(--bg);
+    min-height:100vh;padding:30px 24px 60px}
+  .wrap{max-width:880px;margin:0 auto}
+  .top{display:flex;align-items:center;gap:13px;margin-bottom:6px}
+  .logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+    display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 6px 20px -6px rgba(91,142,240,.6)}
+  h1{font-size:23px;margin:0;font-weight:700;letter-spacing:-.2px}
+  .sub{color:var(--t2);margin:2px 0 24px;font-size:13.5px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px}
+  @media(max-width:620px){.row{grid-template-columns:1fr}}
+  .cta{display:flex;align-items:center;gap:13px;padding:16px;border-radius:var(--r);cursor:pointer;
+    background:var(--glass);border:1px solid var(--line);transition:.15s;text-decoration:none;color:inherit}
+  .cta:hover{background:var(--glass-2);border-color:color-mix(in srgb,var(--acc) 40%,var(--line));transform:translateY(-1px)}
+  .cta-ico{width:42px;height:42px;border-radius:11px;background:var(--glass-2);display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0}
+  .cta-t{font-weight:600}
+  .cta-s{color:var(--t2);font-size:12.5px}
+  .sec{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--t2);margin:26px 4px 11px;font-weight:600}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:var(--r);background:var(--glass);border:1px solid var(--line)}
+  .ic{width:40px;height:40px;border-radius:10px;background:var(--glass-2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .meta{flex:1;min-width:0}
+  .nm{font-weight:600;display:flex;align-items:center;gap:8px}
+  .ver{font-size:11px;color:var(--t2);font-weight:500;background:var(--glass-2);padding:1px 7px;border-radius:20px}
+  .badge{font-size:10.5px;color:var(--acc);border:1px solid color-mix(in srgb,var(--acc) 45%,transparent);padding:1px 7px;border-radius:20px}
+  .ds{color:var(--t2);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .sw{position:relative;width:42px;height:24px;border-radius:20px;background:var(--glass-2);border:1px solid var(--line);cursor:pointer;transition:.18s}
+  .sw.on{background:var(--acc);border-color:var(--acc)}
+  .sw::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.18s}
+  .sw.on::after{left:20px}
+  .rm{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--t2);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .rm:hover{background:rgba(255,80,85,.18);color:#ff6066;border-color:transparent}
+  .empty{padding:28px;text-align:center;color:var(--t2);border:1px dashed var(--line);border-radius:var(--r);background:var(--glass)}
+  .note{margin-top:26px;padding:16px;border-radius:var(--r);background:var(--glass);border:1px solid var(--line);color:var(--t2);font-size:13px}
+  .note b{color:var(--t1)} .note code{background:var(--glass-2);padding:1px 6px;border-radius:5px;color:var(--acc);font-size:12px}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;
+    background:#1a1a26;border:1px solid var(--line);padding:11px 18px;border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.5);pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
-<div id="ambient"></div>
-<div class="page">
-  <div class="ph">
-    <div class="ph-icon">🧩</div>
-    <div><div class="ph-title">Extensions</div><div class="ph-sub">Load Chromium extensions and manage what's installed</div></div>
-  </div>
+<div class="wrap">
+  <div class="top"><div class="logo">⚡</div><h1>Pace Addon Shop</h1></div>
+  <div class="sub">Native addons built for Pace — no Chrome Web Store, no broken service workers.</div>
 
-  <div class="cta-row">
-    <div class="cta" onclick="loadUnpacked()">
-      <div class="cta-ico">📂</div>
-      <div><div class="cta-t">Load Unpacked Extension</div><div class="cta-s">Pick a folder containing manifest.json</div></div>
+  <div class="row">
+    <a class="cta" id="store-link" href="#" onclick="openStore(event)">
+      <div class="cta-ico">🛍️</div>
+      <div><div class="cta-t">Browse the Pace Addon Shop ↗</div><div class="cta-s">Find reviewed addons (opens in a new tab)</div></div>
+    </a>
+    <div class="cta" onclick="installFolder()">
+      <div class="cta-ico">📁</div>
+      <div><div class="cta-t">Install from folder…</div><div class="cta-s">Load a Pace Addon you have on disk</div></div>
     </div>
   </div>
 
-  <div id="pane-installed"><div class="ext-grid" id="installed-list"></div></div>
+  <div class="sec">Installed addons</div>
+  <div class="list" id="list"></div>
 
-  <div class="note-card">
-    <b>How extensions work in Pace — the honest version.</b> Pace loads <b>unpacked extensions</b>: a folder that contains a <code>manifest.json</code> (the same folder a Chrome extension uses once unzipped). There is no Chrome Web Store in Pace. What actually works: <b>content-script extensions</b> (ad/content blockers, page restylers, dark-mode tools, auto-scrollers) and extensions whose features live in their popup or injected scripts — these run well. What is limited: most modern extensions are <b>Manifest V3</b> and keep their core logic in a background <b>service worker</b>, and Electron's support for extension service workers is incomplete — so an MV3 extension that depends on its background may show “failed to load” or only partly work. Anything using Chrome-only APIs (e.g. <code>tabCapture</code>) will not work. <b>Rule of thumb:</b> if an extension mainly changes web pages, it'll likely work; if it needs a constantly-running background, it may not. Want to build one that's guaranteed to work? See the developer guide in the project README.
+  <div class="note">
+    <b>What is a Pace Addon?</b> Pace doesn't run Chrome extensions — modern ones rely on a background
+    service worker that can't run on Pace's engine, which is why they fail to load. A <b>Pace Addon</b> is
+    a small folder with an <code>addon.json</code> that the browser drives directly: it can hide elements,
+    inject content scripts, and block network requests — no service worker needed. Building one is easy;
+    the format is documented in the project README. Addons installed from outside the official Shop show a
+    security warning first, because an addon can read and change the pages you visit.
   </div>
 </div>
-
 <div id="toast"></div>
 
 <script>
-const FEATURED=[
-  {name:'uBlock Origin',icon:'🛡️',desc:'Efficient, wide-spectrum content and ad blocker that is easy on memory.',rating:'4.7',users:'37M+',url:'https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm'},
-  {name:'Bitwarden Password Manager',icon:'🔐',desc:'A secure and free password manager for all of your devices.',rating:'4.6',users:'10M+',url:'https://chromewebstore.google.com/detail/bitwarden-free-password-m/nngceckbapebfimnlniiiahkandclblb'},
-  {name:'Dark Reader',icon:'🌙',desc:'Dark mode for every website. Care for your eyes, day and night.',rating:'4.6',users:'7M+',url:'https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh'},
-  {name:'Grammarly',icon:'✍️',desc:'AI writing assistant that checks grammar, spelling and tone.',rating:'4.6',users:'10M+',url:'https://chromewebstore.google.com/detail/grammarly-ai-writing-assi/kbfnbcaeplbcioakkpcpgfkobkghlhen'},
-  {name:'Honey',icon:'🍯',desc:'Automatically finds and applies coupon codes at checkout.',rating:'4.8',users:'17M+',url:'https://chromewebstore.google.com/detail/honey-automatic-coupons-r/bmnlcjabgnpnenekpadlanbbkooimhnj'},
-  {name:'Vimium',icon:'⌨️',desc:'Navigate and control the browser entirely from the keyboard.',rating:'4.7',users:'600K+',url:'https://chromewebstore.google.com/detail/vimium/dbepggeogbaibhgnhhndojpepiihcmeb'},
-  {name:'SponsorBlock for YouTube',icon:'⏭️',desc:'Skip sponsorships, intros and more on YouTube automatically.',rating:'4.8',users:'5M+',url:'https://chromewebstore.google.com/detail/sponsorblock-for-youtube/mnjggcdmjocbbbhaepdhchncahnbgone'},
-  {name:'OneTab',icon:'📋',desc:'Convert all tabs into a list to save memory and reduce clutter.',rating:'4.5',users:'2M+',url:'https://chromewebstore.google.com/detail/onetab/chphlpgkkbolifaimnlloiipkdnihall'},
-  {name:'Refined GitHub',icon:'🐙',desc:'Simplifies the GitHub interface and adds useful features.',rating:'4.7',users:'500K+',url:'https://chromewebstore.google.com/detail/refined-github/hlepfoohegkhhmjieoechaddaejaokhf'},
-];
-let installed=[];
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);}
-function openStore(){if(window.pace)window.pace.newTab('https://chromewebstore.google.com/');}
-function openUrl(u){if(window.pace)window.pace.newTab(u);}
+const STORE_URL='https://paceaddonshop.thestripedfox.workers.dev';
+const ICONS=['🧩','🛡️','🎨','⚙️','🔖','🔍','🌙','⌨️'];
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+function openStore(e){ if(e)e.preventDefault(); if(window.pace&&pace.newTab){ pace.newTab(STORE_URL); } }
 
-async function init(){
-  if(window.pace){
-    const s=await window.pace.getSettings();
-    document.body.classList.toggle('light',s.theme==='light');
-    if(s.accentColor){document.documentElement.style.setProperty('--acc',s.accentColor);}
-    if(s.accentColor2){document.documentElement.style.setProperty('--acc2',s.accentColor2);}
-    installed=await window.pace.getExtensions()||[];
-  }
-  renderInstalled();
+async function render(){
+  let items=[];
+  try{ items = (window.pace&&pace.getAddons)?await pace.getAddons():[]; }catch(e){ items=[]; }
+  const list=document.getElementById('list');
+  if(!items.length){ list.innerHTML='<div class="empty">No addons installed yet. Browse the Shop above, or install one from a folder.</div>'; return; }
+  list.innerHTML='';
+  items.forEach((a,i)=>{
+    const card=document.createElement('div'); card.className='card';
+    card.innerHTML=
+      '<div class="ic">'+ICONS[i%ICONS.length]+'</div>'+
+      '<div class="meta"><div class="nm">'+esc(a.name)+' <span class="ver">v'+esc(a.version)+'</span>'+(a.builtin?' <span class="badge">Built-in</span>':'')+'</div>'+
+      '<div class="ds">'+(esc(a.description)||esc(a.author)||'Pace Addon')+'</div></div>'+
+      '<div class="actions">'+
+        '<div class="sw'+(a.enabled?' on':'')+'" title="Enable / disable" data-id="'+esc(a.id)+'"></div>'+
+        (a.builtin?'':'<button class="rm" title="Remove" data-rm="'+esc(a.id)+'">🗑</button>')+
+      '</div>';
+    list.appendChild(card);
+  });
+  list.querySelectorAll('.sw').forEach(sw=>sw.addEventListener('click',async()=>{
+    const id=sw.dataset.id, on=!sw.classList.contains('on');
+    sw.classList.toggle('on',on);
+    try{ await pace.setAddonEnabled(id,on); toast(on?'Addon enabled — reload pages to apply':'Addon disabled'); }catch(e){ sw.classList.toggle('on',!on); }
+  }));
+  list.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',async()=>{
+    const id=b.dataset.rm;
+    try{ const r=await pace.removeAddon(id); if(r&&r.ok){ toast('Addon removed'); render(); } else { toast((r&&r.reason)||'Could not remove'); } }catch(e){ toast('Could not remove'); }
+  }));
 }
-function showTab(t){
-  ['installed','featured'].forEach(id=>{document.getElementById('pane-'+id).style.display=id===t?'block':'none';document.getElementById('tab-'+id).classList.toggle('active',id===t);});
-}
-
-function renderInstalled(){
-  const el=document.getElementById('installed-list');
-  if(!installed.length){el.innerHTML='<div class="empty"><div class="empty-ico">🧩</div><div>No extensions installed yet</div><div style="font-size:12px;margin-top:6px">Use “Load Unpacked Extension” above to add one</div></div>';return;}
-  el.innerHTML=installed.map((ext,i)=>'<div class="ext-card"><div class="ext-ph">'+((ext.icon&&ext.icon.indexOf('data:')===0)?'<img src="'+esc(ext.icon)+'" alt="">':'🧩')+'</div><div class="ext-info"><div class="ext-name">'+esc(ext.name)+(ext.version?' <span style="font-size:11px;color:var(--t3)">v'+esc(ext.version)+'</span>':'')+'</div><div class="ext-meta">'+(ext.error?'<span class="ext-badge warn">⚠ '+esc(ext.error.slice(0,50))+'</span>':'<span class="ext-badge">'+(ext.enabled?'Active':'Disabled')+'</span>')+(ext.path?'<span class="ext-badge path" title="'+esc(ext.path)+'">'+esc(ext.path)+'</span>':'')+'</div></div><div class="ext-right"><div class="toggle'+(ext.enabled?' on':'')+'" onclick="toggleExt('+i+',this)"></div><button class="btn-rm" onclick="removeExt('+i+')" title="Remove">✕</button></div></div>').join('');
-}
-async function toggleExt(i,el){
-  const ext=installed[i]; const next=!ext.enabled;
-  const r=await window.pace.setExtensionEnabled(ext.id||ext.path,next);
-  if(r&&r.ok){ext.enabled=next;el.classList.toggle('on',next);renderInstalled();toast(next?'Extension enabled':'Extension disabled');}
-  else toast((r&&r.reason)?r.reason:'Could not change state');
-}
-async function removeExt(i){
-  const ext=installed[i];
-  if(!confirm('Remove '+ext.name+'?'))return;
-  await window.pace.removeExtension(ext.id||ext.path);
-  installed.splice(i,1); renderInstalled(); toast('Extension removed');
-}
-async function installFromStore(explicit){
-  if(!window.pace)return;
-  const inp=document.getElementById('store-input'), btn=document.getElementById('store-btn'), st=document.getElementById('store-status');
-  const val=(explicit||inp.value||'').trim();
-  if(!val){ st.className='si-status err'; st.textContent='Paste a Web Store link or extension ID first.'; return; }
-  btn.disabled=true; const old=btn.textContent; btn.textContent='Installing…';
-  st.className='si-status'; st.textContent='Downloading and unpacking…';
+async function installFolder(){
   try{
-    const r=await window.pace.installFromStore(val);
-    if(r&&r.ok){ installed=await window.pace.getExtensions()||[]; renderInstalled(); showTab('installed'); st.className='si-status ok'; st.textContent='Installed '+(r.ext&&r.ext.name||'extension')+'.'; inp.value=''; }
-    else { st.className='si-status err'; st.textContent=(r&&r.reason)||'Install failed.'; }
-  }catch(e){ st.className='si-status err'; st.textContent='Install failed: '+(e&&e.message||e); }
-  btn.disabled=false; btn.textContent=old;
+    const r=await pace.installAddonFolder();
+    if(r&&r.ok){ toast('Installed “'+(r.name||'addon')+'”'); render(); }
+    else if(r&&r.reason&&r.reason!=='cancelled'){ toast(r.reason); }
+  }catch(e){ toast('Install failed'); }
 }
-async function loadUnpacked(){
-  if(!window.pace)return;
-  const r=await window.pace.installExtensionFolder();
-  if(r&&r.ok){installed=await window.pace.getExtensions()||[];renderInstalled();showTab('installed');toast('Installed '+r.ext.name);}
-  else if(r&&r.reason&&r.reason!=='cancelled')toast(r.reason);
-}
-
-function renderFeatured(){
-  document.getElementById('featured-list').innerHTML=FEATURED.map(ext=>'<div class="ext-card"><div class="ext-ph">'+ext.icon+'</div><div class="ext-info"><div class="ext-name">'+esc(ext.name)+'</div><div class="ext-desc">'+esc(ext.desc)+'</div><div class="ext-meta"><span class="ext-rating">⭐ '+ext.rating+'</span><span class="ext-users">'+ext.users+' users</span></div></div><div class="ext-right"><button class="btn-store" onclick="installFromStore(\''+esc(ext.url)+'\')">Install</button><button class="btn-store" onclick="openUrl(\''+esc(ext.url)+'\')">View ↗</button></div></div>').join('');
-}
-
-init();
+render();
 </script>
 </body>
 </html>
