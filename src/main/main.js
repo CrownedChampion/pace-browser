@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, ipcMain, protocol, session, shell, Menu, MenuItem, dialog, clipboard, net } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, protocol, session, shell, Menu, MenuItem, dialog, clipboard, net, webContents } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -310,6 +310,8 @@ const AD_URL_PATTERNS = [
   'fullstory.com', 'clarity.ms', 'mc.yandex.ru', 'bat.bing.com', 'analytics.tiktok.com',
   'google-analytics.com/g/collect', 'google-analytics.com/collect', 'facebook.com/tr'
 ];
+// Registrable domain (eTLD+1, simple last-two-labels heuristic) — used to tell first-party from third-party.
+function registrable(h) { if (!h) return ''; const p = h.split('.'); return p.length <= 2 ? h : p.slice(-2).join('.'); }
 function applyNetworkRules() {
   const s = loadSettings();
   const ses = session.defaultSession;
@@ -324,6 +326,16 @@ function applyNetworkRules() {
       const lower = url.toLowerCase();
       let host = '';
       try { host = new URL(url).hostname.toLowerCase(); } catch (e) { host = ''; }
+      // FIRST-PARTY SAFETY: never block a page's own (same-site) requests. Generic patterns like
+      // "/collect", "/track", "/beacon" were cancelling legitimate first-party API/telemetry calls
+      // that single-page apps (e.g. Grok) await before rendering — which left the page blank.
+      // Third-party ad/tracker requests are still blocked below.
+      let pageHost = '';
+      try {
+        const w = (details.webContentsId != null) ? webContents.fromId(details.webContentsId) : null;
+        if (w && !w.isDestroyed()) pageHost = new URL(w.getURL()).hostname.toLowerCase();
+      } catch (e) { pageHost = ''; }
+      if (host && pageHost && registrable(host) === registrable(pageHost)) return callback({});  // first-party → allow
       // 1) hostname-based domain filters (user list)
       if (host) {
         for (const f of filters) {
@@ -559,6 +571,23 @@ function attachTabListeners(view, tabId) {
     }
   });
   wc.on('did-start-loading', () => mainWindow.webContents.send('tab-loading', { tabId, loading: true }));
+  // Auto-close tabs that dead-end on a genuinely blank page (e.g. a popup or redirect that goes
+  // nowhere). Re-checked after a short delay so a tab that is mid-navigation (about:blank -> real
+  // URL) is never closed, the new-tab page (pace://newtab) is never touched, and one tab always stays.
+  wc.on('did-finish-load', () => {
+    try {
+      const u = wc.getURL() || '';
+      if (u === 'about:blank' || u === '') {
+        setTimeout(() => {
+          try {
+            if (!tabs[tabId]) return;
+            const cur = tabs[tabId].webContents.getURL() || '';
+            if ((cur === 'about:blank' || cur === '') && Object.keys(tabs).length > 1) closeTab(tabId);
+          } catch (e) {}
+        }, 1200);
+      }
+    } catch (e) {}
+  });
   wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => {
     if (isMainFrame && formatUrl(url || wc.getURL()).startsWith('pace://')) {
       mainWindow.webContents.send('tab-update', { tabId, favicon: '' });
@@ -1239,6 +1268,25 @@ ipcMain.handle('search-suggestions', async (e, { query }) => {
       req.end();
     } catch (e) { resolve([]); }
   });
+});
+
+ipcMain.handle('share-page', async (e, payload) => {
+  const cur = (activeTabId && tabs[activeTabId]) ? (tabs[activeTabId].webContents.getURL() || '') : '';
+  const url = (payload && payload.url) || formatUrl(cur) || '';
+  const title = (payload && payload.title) || ((activeTabId && tabs[activeTabId]) ? (tabs[activeTabId].webContents.getTitle() || url) : url);
+  if (!url) return { ok: false, method: 'none' };
+  // Prefer the OS share sheet via the page's Web Share API (Chromium wires navigator.share to the
+  // Windows share UI). Run it in the active tab with a synthetic user gesture. If it isn't available
+  // (custom page, or Web Share not present), fall back to copying the link so the button always works.
+  try {
+    if (activeTabId && tabs[activeTabId] && /^https?:/.test(cur)) {
+      const wc = tabs[activeTabId].webContents;
+      const js = '(async()=>{try{if(navigator.share){await navigator.share({title:' + JSON.stringify(title) + ',text:' + JSON.stringify(url) + ',url:' + JSON.stringify(url) + '});return "shared";}return "unavailable";}catch(err){return (err&&err.name==="AbortError")?"cancelled":"error";}})()';
+      const r = await wc.executeJavaScript(js, true);
+      if (r === 'shared' || r === 'cancelled') return { ok: true, method: 'native' };
+    }
+  } catch (e2) {}
+  try { clipboard.writeText(url); return { ok: true, method: 'copy' }; } catch (e3) { return { ok: false, method: 'none' }; }
 });
 
 ipcMain.handle('clear-browsing-data', async () => {

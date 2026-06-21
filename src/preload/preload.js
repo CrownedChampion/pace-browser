@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('pace', {
   // Misc
   openExternal: (url) => ipcRenderer.send('open-external', { url }),
   normalizeUrl: (url) => ipcRenderer.invoke('normalize-url', { url }),
+  sharePage: (payload) => ipcRenderer.invoke('share-page', payload),
   getSuggestions: (query) => ipcRenderer.invoke('search-suggestions', { query }),
   reopenClosedTab: () => ipcRenderer.send('reopen-closed-tab'),
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
