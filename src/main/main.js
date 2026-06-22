@@ -1045,6 +1045,11 @@ ipcMain.on('reload', () => { if (activeTabId && tabs[activeTabId]) tabs[activeTa
 ipcMain.on('stop-loading', () => { if (activeTabId && tabs[activeTabId]) tabs[activeTabId].webContents.stop(); });
 
 ipcMain.on('set-page-bounds', (e, { bounds }) => setPageBounds(bounds));
+// Snapshot the active page so the chrome can freeze it behind a floating menu (overlay menus).
+ipcMain.handle('capture-page', async () => {
+  try { if (activeTabId && tabs[activeTabId]) { const img = await tabs[activeTabId].webContents.capturePage(); return img.toDataURL(); } } catch (e) {}
+  return '';
+});
 ipcMain.on('set-sidebar-view', (e, payload) => setSidebarView(payload));
 ipcMain.on('open-settings-panel', (e, { bounds }) => setSettingsPanel(bounds));
 ipcMain.on('close-settings-panel', () => { setSettingsPanel(null); mainWindow.webContents.send('settings-panel-closed'); });

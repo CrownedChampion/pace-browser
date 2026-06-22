@@ -340,12 +340,13 @@ select.bme-inp option{color:#111;background:#fff}
 }
 #ext-popup.show{display:flex;animation:slideInRight .22s var(--ease)}
 /* Liquid-glass popout panels — more transparent, glossy sheen, deeper float shadow */
-#qs, #ext-popup, #sidebar{
+#page-frost{ position:fixed; display:none; z-index:1050; background-size:cover; background-position:center top; background-repeat:no-repeat; filter:brightness(.74) saturate(1.05); pointer-events:auto; }
+#qs, #ext-popup, #sidebar, #dl-drawer{
   background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02) 38%, rgba(255,255,255,0)), var(--glass);
   -webkit-backdrop-filter:blur(50px) saturate(190%); backdrop-filter:blur(50px) saturate(190%);
   box-shadow:-20px 0 56px -16px rgba(0,0,0,.55), inset 0 1px 0 var(--glass-hi), inset 1px 0 0 var(--glass-hi);
 }
-body.light #qs, body.light #ext-popup, body.light #sidebar{
+body.light #qs, body.light #ext-popup, body.light #sidebar, body.light #dl-drawer{
   background:linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.28) 38%, rgba(255,255,255,.18)), var(--glass);
 }
 .ep-head{padding:13px 16px;border-bottom:1px solid var(--glass-line);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
@@ -413,6 +414,8 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
 </head>
 <body>
 <div id="ambient"></div>
+<!-- Frozen snapshot of the page, shown behind a floating menu so menus hover over the page instead of shrinking it -->
+<div id="page-frost"></div>
 
 <div id="chrome">
   <div id="tab-row">
@@ -1014,10 +1017,26 @@ function settingsBounds(){
   const w=Math.min(780,Math.max(420,W-120)), h=Math.min(660,Math.max(360,H-CH-80));
   return {x:Math.round((W-w)/2),y:Math.round(CH+(H-CH-h)/2),width:w,height:h};
 }
+function anyTransientMenu(){ return dlOpen||qsOpen||extPopupOpen; }
+function positionFrost(){ const CH=chromeH(); const f=document.getElementById('page-frost'); const x=sidebarOpen?SIDEBAR_TOTAL:0; f.style.top=CH+'px'; f.style.left=x+'px'; f.style.right='0px'; f.style.bottom='0px'; }
+let overlayShown=false;
+async function showFrostIfNeeded(){
+  if(overlayShown){ positionFrost(); return; }   // already frozen (switching menus) — keep the snapshot
+  overlayShown=true;
+  let d=''; try{ d=await pace.capturePage(); }catch(e){}
+  const f=document.getElementById('page-frost');
+  f.style.backgroundImage=d?('url("'+d+'")'):'none';
+  positionFrost(); f.style.display='block';
+  pace.setPageBounds(null);   // detach the live page so the menu floats over the frozen snapshot
+}
+function hideFrost(){ if(!overlayShown)return; overlayShown=false; const f=document.getElementById('page-frost'); f.style.display='none'; f.style.backgroundImage='none'; }
+function endTransientIfNone(){ if(!anyTransientMenu()) hideFrost(); pushLayout(); }
 function pushLayout(){
   const W=window.innerWidth,H=window.innerHeight,CH=chromeH();
-  if(anyModal()){ pace.setPageBounds(null); }
-  else{ let x=0,w=W; if(sidebarOpen){x=SIDEBAR_TOTAL;w-=SIDEBAR_TOTAL;} if(dlOpen){w-=DRAWER_TOTAL;} if(qsOpen){w-=QS_TOTAL;} if(extPopupOpen){w-=EXT_TOTAL;} pace.setPageBounds({x:x,y:CH,width:Math.max(120,w),height:H-CH}); }
+  if(anyTransientMenu()){ pace.setPageBounds(null); positionFrost(); return; }   // a menu floats → keep page detached
+  hideFrost();
+  if(anyModal()){ pace.setPageBounds(null); return; }
+  let x=0,w=W; if(sidebarOpen){x=SIDEBAR_TOTAL;w-=SIDEBAR_TOTAL;} pace.setPageBounds({x:x,y:CH,width:Math.max(120,w),height:H-CH});
   if(sidebarOpen&&activeSbApp){ const app=allApps().find(a=>a.id===activeSbApp); if(app){ const r=document.getElementById('sb-content').getBoundingClientRect(); pace.setSidebarView({url:app.url,bounds:{x:r.left,y:r.top,width:r.width,height:r.height}}); } }
   else pace.setSidebarView(null);
   if(settingsPanelOpen) pace.openSettingsPanel(settingsBounds());
@@ -1143,7 +1162,8 @@ function confirmAppPicker(){
   if(!sidebarOpen) toggleSidebar();
 }
 
-function toggleDownloads(){ if(!dlOpen){ closeQuickSettings(); closeExtPopup(); } dlOpen=!dlOpen; document.getElementById('dl-drawer').classList.toggle('open',dlOpen); pushLayout(); setTimeout(pushLayout,420); }
+function _hideDl(){ dlOpen=false; document.getElementById('dl-drawer').classList.remove('open'); }
+function toggleDownloads(){ if(!dlOpen){ _hideQs(); _hideExt(); dlOpen=true; document.getElementById('dl-drawer').classList.add('open'); showFrostIfNeeded(); } else { _hideDl(); endTransientIfNone(); } }
 function clearDownloads(){ downloadsList=[]; pace.clearDownloads(); renderDownloads(); toast('Download list cleared'); }
 function renderDownloads(){
   const list=document.getElementById('dl-list');
@@ -1178,8 +1198,9 @@ function syncQuickSettings(){
   document.querySelectorAll('#qs-swatches .sw').forEach(el=>el.classList.toggle('active',el.dataset.c===settings.accentColor));
   document.querySelectorAll('#qs-swatches2 .sw').forEach(el=>el.classList.toggle('active',el.dataset.c===(settings.accentColor2||'#a78bfa')));
 }
-function toggleQuickSettings(){ if(qsOpen){closeQuickSettings();return;} closeExtPopup(); if(dlOpen)toggleDownloads(); qsOpen=true; syncQuickSettings(); document.getElementById('qs').classList.add('show'); pushLayout(); }
-function closeQuickSettings(){ qsOpen=false; document.getElementById('qs').classList.remove('show'); pushLayout(); }
+function _hideQs(){ qsOpen=false; document.getElementById('qs').classList.remove('show'); }
+function toggleQuickSettings(){ if(qsOpen){ _hideQs(); endTransientIfNone(); return; } _hideExt(); _hideDl(); qsOpen=true; syncQuickSettings(); document.getElementById('qs').classList.add('show'); showFrostIfNeeded(); }
+function closeQuickSettings(){ _hideQs(); endTransientIfNone(); }
 function qsTheme(v){ settings.theme=v; applyTheme(); pace.saveSettings(settings); syncQuickSettings(); }
 function qsAccent(c){ settings.accentColor=c; applyAccent(); pace.saveSettings(settings); syncQuickSettings(); }
 function qsAccent2(c){ settings.accentColor2=c; applyAccent(); pace.saveSettings(settings); syncQuickSettings(); }
@@ -1231,8 +1252,9 @@ function closeSettingsPanel(){
 }
 
 let popupAddons=[];
-async function toggleExtPopup(){ if(extPopupOpen){closeExtPopup();return;} closeQuickSettings(); if(dlOpen)toggleDownloads(); extPopupOpen=true; document.getElementById('ext-popup').classList.add('show'); try{ popupAddons=await pace.getAddons()||[]; }catch(e){ popupAddons=[]; } renderExtPopup(); pushLayout(); }
-function closeExtPopup(){ if(!extPopupOpen)return; extPopupOpen=false; document.getElementById('ext-popup').classList.remove('show'); pushLayout(); }
+function _hideExt(){ if(!extPopupOpen)return; extPopupOpen=false; document.getElementById('ext-popup').classList.remove('show'); }
+async function toggleExtPopup(){ if(extPopupOpen){ _hideExt(); endTransientIfNone(); return; } _hideQs(); _hideDl(); extPopupOpen=true; document.getElementById('ext-popup').classList.add('show'); try{ popupAddons=await pace.getAddons()||[]; }catch(e){ popupAddons=[]; } renderExtPopup(); showFrostIfNeeded(); }
+function closeExtPopup(){ if(!extPopupOpen)return; _hideExt(); endTransientIfNone(); }
 const EP_STAR='<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.6 3.6 3.9.4-2.9 2.6.8 3.8L8 11.1 4.6 12.8l.8-3.8L2.5 6.4l3.9-.4L8 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
 function epIco(ext){ return (ext.icon&&ext.icon.indexOf('data:')===0)?'<img src="'+esc(ext.icon)+'" alt="">':'🧩'; }
 function renderExtPopup(){

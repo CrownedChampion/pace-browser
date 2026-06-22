@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('pace', {
 
   // Layout (renderer-driven)
   setPageBounds:  (bounds) => ipcRenderer.send('set-page-bounds', { bounds }),
+  capturePage:    () => ipcRenderer.invoke('capture-page'),
   setSidebarView: (payload) => ipcRenderer.send('set-sidebar-view', payload),
   openSettingsPanel:  (bounds) => ipcRenderer.send('open-settings-panel', { bounds }),
   closeSettingsPanel: () => ipcRenderer.send('close-settings-panel'),
