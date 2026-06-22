@@ -624,6 +624,7 @@ function attachTabListeners(view, tabId) {
   wc.on('page-title-updated', (e, title) => mainWindow.webContents.send('tab-update', { tabId, title }));
   wc.on('page-favicon-updated', (e, favs) => { if (favs && favs[0]) mainWindow.webContents.send('tab-update', { tabId, favicon: favs[0] }); });
   const navUpdate = (url) => mainWindow.webContents.send('tab-update', { tabId, url: formatUrl(url), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
+  wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => { if (isMainFrame && url) mainWindow.webContents.send('tab-update', { tabId, url: formatUrl(url) }); });
   wc.on('did-navigate', (e, url) => navUpdate(url));
   wc.on('did-navigate-in-page', (e, url) => navUpdate(url));
   wc.setWindowOpenHandler(({ url, disposition }) => {
@@ -754,10 +755,13 @@ function formatUrl(u) {
 
 function switchTab(tabId) {
   if (!tabs[tabId]) return;
-  if (activeTabId && tabs[activeTabId] && !tabMeta[activeTabId].detached) mainWindow.removeBrowserView(tabs[activeTabId]);
+  if (activeTabId && tabs[activeTabId] && tabMeta[activeTabId] && !tabMeta[activeTabId].detached) mainWindow.removeBrowserView(tabs[activeTabId]);
   activeTabId = tabId;
-  tabMeta[tabId].detached = false;
+  if (tabMeta[tabId]) tabMeta[tabId].detached = false;
   mainWindow.addBrowserView(tabs[tabId]);
+  // Re-apply the last known page bounds right away so the view paints at the correct size immediately
+  // instead of showing blank until the renderer happens to push a fresh layout.
+  if (lastPageBounds) { try { tabs[tabId].setBounds(lastPageBounds); } catch (e) {} }
   const wc = tabs[tabId].webContents;
   try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(wc); } catch (e) {}
   mainWindow.webContents.send('tab-switched', { tabId, url: formatUrl(wc.getURL()), title: wc.getTitle(), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
@@ -774,14 +778,19 @@ function closeTab(tabId) {
     if (u && u !== 'pace://newtab') { closedTabs.push(u); if (closedTabs.length > 25) closedTabs.shift(); }
   } catch (e) {}
   if (wasActive && tabMeta[tabId] && !tabMeta[tabId].detached) mainWindow.removeBrowserView(tabs[tabId]);
-  try { tabs[tabId].webContents.destroy(); } catch (e) {}
+  const closingView = tabs[tabId];
   delete tabs[tabId]; delete tabMeta[tabId];
   mainWindow.webContents.send('tab-closed', { tabId });
   if (wasActive) {
     const ids = Object.keys(tabs).map(Number);
     if (ids.length) switchTab(ids[Math.max(0, idx - 1)]);   // go to the neighbor (prefer the left one)
     else { activeTabId = null; createTab('pace://newtab'); }
+  } else if (closingView) {
+    try { mainWindow.removeBrowserView(closingView); } catch (e) {}
   }
+  // Tear down the closed page on the NEXT tick — destroying it synchronously, before the neighbour
+  // view had been added and shown, was leaving the newly-active tab blank until another tab was clicked.
+  setTimeout(() => { try { closingView.webContents.destroy(); } catch (e) {} }, 0);
   ensureTab();
 }
 
@@ -800,6 +809,7 @@ function duplicateTab(tabId) {
 }
 
 // ─── Layout (renderer-driven) ───────────────────────────────────────────────────
+let lastPageBounds = null;   // remembered page-view bounds, re-applied on tab switch so it paints instantly
 function setPageBounds(bounds) {
   if (!activeTabId || !tabs[activeTabId]) return;
   const view = tabs[activeTabId];
@@ -809,7 +819,9 @@ function setPageBounds(bounds) {
     return;
   }
   if (meta.detached) { mainWindow.addBrowserView(view); meta.detached = false; }
-  view.setBounds({ x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.max(120, Math.round(bounds.width)), height: Math.max(120, Math.round(bounds.height)) });
+  const b = { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.max(120, Math.round(bounds.width)), height: Math.max(120, Math.round(bounds.height)) };
+  lastPageBounds = b;
+  view.setBounds(b);
 }
 
 function setSidebarView(payload) {
@@ -1096,7 +1108,14 @@ ipcMain.handle('check-for-updates', async () => {
   }
   catch (err) { return { ok: false, reason: friendlyUpdateError(err) }; }
 });
-ipcMain.on('quit-and-install', () => { try { if (autoUpdater) autoUpdater.quitAndInstall(); } catch (e) {} });
+ipcMain.on('quit-and-install', () => {
+  try {
+    if (!autoUpdater) return;
+    // Silent install + force-run-after so exactly one fresh instance relaunches once the old process
+    // has fully exited. (autoInstallOnAppQuit is off, so this explicit path is the only installer.)
+    setImmediate(() => { try { autoUpdater.quitAndInstall(true, true); } catch (e) {} });
+  } catch (e) {}
+});
 
 ipcMain.handle('get-history', () => readHistory());
 ipcMain.on('clear-history', () => { try { fs.writeFileSync(historyPath, '[]'); } catch (e) {} });
@@ -2172,7 +2191,7 @@ app.whenReady().then(async () => {
   if (autoUpdater && app.isPackaged) {
     try {
       autoUpdater.autoDownload = true;
-      autoUpdater.autoInstallOnAppQuit = true;
+      autoUpdater.autoInstallOnAppQuit = false;
       autoUpdater.on('update-available', (info) => sendToAll('update-status', { state: 'available', version: info && info.version }));
       autoUpdater.on('update-not-available', () => sendToAll('update-status', { state: 'none' }));
       autoUpdater.on('download-progress', (p) => sendToAll('update-status', { state: 'downloading', percent: Math.round((p && p.percent) || 0) }));

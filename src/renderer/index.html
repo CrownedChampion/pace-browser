@@ -894,7 +894,7 @@ function handleBookmarkAction(action,index){
 }
 
 function bindTabEvents(){
-  pace.on('tab-created',({tabId,url,active})=>{ tabs[tabId]={tabId,url:url||'pace://newtab',title:'New Tab',loading:false}; if(active)activeTabId=tabId; renderTabs(); if(active){setAddrBar(url);pushLayout();} });
+  pace.on('tab-created',({tabId,url,active})=>{ if(active)saveAddrDraft(); tabs[tabId]={tabId,url:url||'pace://newtab',title:'New Tab',loading:false}; if(active)activeTabId=tabId; renderTabs(); if(active){setAddrBar(url,true);pushLayout();} });
   pace.on('tab-closed',({tabId})=>{
     const wasActive=(tabId===activeTabId);
     const ids=Object.keys(tabs).map(Number); const idx=ids.indexOf(tabId);
@@ -987,9 +987,9 @@ function updatePlusButton(){
 }
 function tabIconFor(t){ if(t.url&&t.url.startsWith('pace://'))return '<svg width="13" height="13" viewBox="0 0 28 28" fill="none"><path d="M9 7v14M9 7h6a4 4 0 0 1 0 8H9" stroke="url(#tpg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="tpg" x1="9" y1="7" x2="19" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="var(--acc)"/><stop offset="1" stop-color="var(--acc2)"/></linearGradient></defs></svg>'; return '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 6h9M6 1.5C6 1.5 4 3.5 4 6s2 4.5 2 4.5M6 1.5C6 1.5 8 3.5 8 6S6 10.5 6 10.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>'; }
 
-function setAddrBar(url){ const el=document.getElementById('addr'); if(document.activeElement!==el)el.value=url||''; document.getElementById('addr-icon').classList.toggle('secure',!!(url&&url.startsWith('https://'))); }
+function setAddrBar(url,force){ const el=document.getElementById('addr'); if(force||document.activeElement!==el)el.value=url||''; document.getElementById('addr-icon').classList.toggle('secure',!!(url&&url.startsWith('https://'))); }
 function saveAddrDraft(){ const el=document.getElementById('addr'); if(!el||activeTabId==null||!tabs[activeTabId])return; if(document.activeElement===el){ tabs[activeTabId].addrDraft=el.value; } else { delete tabs[activeTabId].addrDraft; } }
-function restoreAddrFor(tabId,url){ const el=document.getElementById('addr'); const t=tabs[tabId]; if(t&&typeof t.addrDraft==='string'){ el.value=t.addrDraft; document.getElementById('addr-icon').classList.toggle('secure',false); } else { setAddrBar(url); } }
+function restoreAddrFor(tabId,url){ const el=document.getElementById('addr'); const t=tabs[tabId]; if(t&&typeof t.addrDraft==='string'){ el.value=t.addrDraft; document.getElementById('addr-icon').classList.toggle('secure',false); } else { setAddrBar(url,true); } }
 function setNavBtns(back,fwd){ document.getElementById('btn-back').classList.toggle('disabled',!back); document.getElementById('btn-fwd').classList.toggle('disabled',!fwd); }
 
 function setLoading(loading){
