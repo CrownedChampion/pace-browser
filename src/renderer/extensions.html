@@ -21,8 +21,7 @@
     display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 6px 20px -6px rgba(91,142,240,.6)}
   h1{font-size:23px;margin:0;font-weight:700;letter-spacing:-.2px}
   .sub{color:var(--t2);margin:2px 0 24px;font-size:13.5px}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px}
-  @media(max-width:620px){.row{grid-template-columns:1fr}}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:13px;margin-bottom:14px}
   .cta{display:flex;align-items:center;gap:13px;padding:16px;border-radius:var(--r);cursor:pointer;
     background:var(--glass);border:1px solid var(--line);transition:.15s;text-decoration:none;color:inherit}
   .cta:hover{background:var(--glass-2);border-color:color-mix(in srgb,var(--acc) 40%,var(--line));transform:translateY(-1px)}
@@ -63,9 +62,13 @@
       <div class="cta-ico">🛍️</div>
       <div><div class="cta-t">Browse the Pace Addon Shop ↗</div><div class="cta-s">Find reviewed addons (opens in a new tab)</div></div>
     </a>
+    <div class="cta" onclick="installFile()">
+      <div class="cta-ico">📦</div>
+      <div><div class="cta-t">Install .paceaddon file…</div><div class="cta-s">A package downloaded from the Shop</div></div>
+    </div>
     <div class="cta" onclick="installFolder()">
       <div class="cta-ico">📁</div>
-      <div><div class="cta-t">Install from folder…</div><div class="cta-s">Load a Pace Addon you have on disk</div></div>
+      <div><div class="cta-t">Install from folder…</div><div class="cta-s">A Pace Addon folder on disk</div></div>
     </div>
   </div>
 
@@ -121,6 +124,13 @@ async function render(){
 async function installFolder(){
   try{
     const r=await pace.installAddonFolder();
+    if(r&&r.ok){ toast('Installed “'+(r.name||'addon')+'”'); render(); }
+    else if(r&&r.reason&&r.reason!=='cancelled'){ toast(r.reason); }
+  }catch(e){ toast('Install failed'); }
+}
+async function installFile(){
+  try{
+    const r=await pace.installAddonFile();
     if(r&&r.ok){ toast('Installed “'+(r.name||'addon')+'”'); render(); }
     else if(r&&r.reason&&r.reason!=='cancelled'){ toast(r.reason); }
   }catch(e){ toast('Install failed'); }

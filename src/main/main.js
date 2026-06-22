@@ -1315,20 +1315,30 @@ ipcMain.handle('share-page', async (e, payload) => {
 ipcMain.handle('get-addons', () => { try { return addons.list(); } catch (e) { return []; } });
 ipcMain.handle('set-addon-enabled', (e, { id, enabled }) => { try { return addons.setEnabled(id, enabled); } catch (err) { return { ok: false }; } });
 ipcMain.handle('remove-addon', (e, { id }) => { try { return addons.remove(id); } catch (err) { return { ok: false, reason: 'Failed to remove addon.' }; } });
+// Shared security warning shown before installing any addon from outside the official Shop.
+async function addonInstallWarning() {
+  const c = await dialog.showMessageBox(mainWindow, {
+    type: 'warning', buttons: ['Cancel', 'Install anyway'], defaultId: 0, cancelId: 0, noLink: true,
+    title: 'Install this addon?',
+    message: 'Only install Pace Addons from sources you trust.',
+    detail: 'Pace Addons can read and change the pages you visit. Install one only if you trust where it came from.\n\nThe official, reviewed addons are at paceaddonshop.thestripedfox.workers.dev.'
+  });
+  return c.response === 1;
+}
 ipcMain.handle('install-addon-folder', async () => {
   try {
     const r = await dialog.showOpenDialog(mainWindow, { title: 'Select a Pace Addon folder (the folder containing addon.json)', properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, reason: 'cancelled' };
-    // SECURITY: anything installed outside the official Pace Addon Shop gets an explicit warning,
-    // because an addon can read and modify every page you visit.
-    const confirm = await dialog.showMessageBox(mainWindow, {
-      type: 'warning', buttons: ['Cancel', 'Install anyway'], defaultId: 0, cancelId: 0, noLink: true,
-      title: 'Install an addon from outside the Pace Addon Shop?',
-      message: 'This addon is not from the official Pace Addon Shop.',
-      detail: 'Pace Addons can read and change the pages you visit. Only install addons from sources you trust.\n\nThe official, reviewed addons are at paceaddonshop.thestripedfox.workers.dev.'
-    });
-    if (confirm.response !== 1) return { ok: false, reason: 'cancelled' };
+    if (!(await addonInstallWarning())) return { ok: false, reason: 'cancelled' };
     return addons.installFromFolder(r.filePaths[0]);
+  } catch (e) { return { ok: false, reason: 'Install failed.' }; }
+});
+ipcMain.handle('install-addon-file', async () => {
+  try {
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Select a .paceaddon file', properties: ['openFile'], filters: [{ name: 'Pace Addon', extensions: ['paceaddon', 'zip'] }] });
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, reason: 'cancelled' };
+    if (!(await addonInstallWarning())) return { ok: false, reason: 'cancelled' };
+    return addons.installFromZip(r.filePaths[0]);
   } catch (e) { return { ok: false, reason: 'Install failed.' }; }
 });
 

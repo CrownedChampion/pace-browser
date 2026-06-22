@@ -186,8 +186,35 @@ function installFromFolder(srcDir) {
   registry.enabled[id] = true; saveRegistry(); reload();
   return { ok: true, id, name: String(m.name) };
 }
+// Install a .paceaddon (a zip of the addon folder), e.g. one downloaded from the Pace Addon Shop.
+function installFromZip(zipPath) {
+  let AdmZip;
+  try { AdmZip = require('adm-zip'); }
+  catch (e) { return { ok: false, reason: 'This build can\u2019t open .paceaddon packages (unzip library missing). Unzip it and use \u201CInstall from folder\u201D instead.' }; }
+  let tmp;
+  try {
+    tmp = path.join(USER_DIR, '.unpack-' + Date.now());
+    fs.mkdirSync(tmp, { recursive: true });
+    new AdmZip(zipPath).extractAllTo(tmp, true);
+  } catch (e) {
+    try { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {}
+    return { ok: false, reason: 'That file is not a valid .paceaddon package.' };
+  }
+  // The addon.json may be at the zip root or inside a single top-level folder — handle both.
+  let src = tmp;
+  if (!fs.existsSync(path.join(src, 'addon.json'))) {
+    try {
+      const subs = fs.readdirSync(tmp, { withFileTypes: true }).filter(d => d.isDirectory());
+      const hit = subs.find(d => fs.existsSync(path.join(tmp, d.name, 'addon.json')));
+      if (hit) src = path.join(tmp, hit.name);
+    } catch (e) {}
+  }
+  const res = installFromFolder(src);
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
+  return res;
+}
 
 module.exports = {
-  init, reload, list, setEnabled, remove, installFromFolder,
+  init, reload, list, setEnabled, remove, installFromFolder, installFromZip,
   cssForUrl, contentScriptsForUrl, networkRules
 };

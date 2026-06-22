@@ -1,0 +1,14 @@
+# Pace Addon Shop — Cloudflare Worker config
+# Deploys to: paceaddonshop.<your-subdomain>.workers.dev
+name = "paceaddonshop"
+main = "src/worker.js"
+compatibility_date = "2025-06-01"
+
+# R2 bucket for addon storage (10 GB free tier). Create it once with:
+#   wrangler r2 bucket create pace-addons
+[[r2_buckets]]
+binding = "ADDONS"
+bucket_name = "pace-addons"
+
+# PUBLISH_TOKEN is NOT stored here — set it as a secret so it never lands in git:
+#   wrangler secret put PUBLISH_TOKEN

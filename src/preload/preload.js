@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('pace', {
   setAddonEnabled: (id, enabled) => ipcRenderer.invoke('set-addon-enabled', { id, enabled }),
   removeAddon: (id) => ipcRenderer.invoke('remove-addon', { id }),
   installAddonFolder: () => ipcRenderer.invoke('install-addon-folder'),
+  installAddonFile: () => ipcRenderer.invoke('install-addon-file'),
   getSuggestions: (query) => ipcRenderer.invoke('search-suggestions', { query }),
   reopenClosedTab: () => ipcRenderer.send('reopen-closed-tab'),
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
