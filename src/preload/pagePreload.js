@@ -487,6 +487,7 @@ else if (window.top === window) {
         document.addEventListener('keydown', onPickKey, true);
       }
       ipcRenderer.on('pace-pick-element', () => startPicking());
+      ipcRenderer.on('pace-cancel-pick', () => { try { stopPicking(); } catch (e) {} });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();

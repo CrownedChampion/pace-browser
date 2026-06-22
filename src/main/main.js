@@ -265,30 +265,20 @@ const THIN_SCROLLBAR_CSS = `
 // Cosmetic ad hiding — hides common ad containers/iframes by selector when ad-block is on.
 // This complements network blocking (which stops the request) by removing leftover ad slots.
 const AD_HIDE_CSS = `
-  /* Google AdSense / GPT / DoubleClick */
+  /* High-confidence ad units only. Deliberately conservative: NO broad substring matchers like
+     [id^="ad-"] or [class*="ad-container"], which were collapsing real page layout. The network
+     host blocklist already stops most ads from loading; this just hides the few that render. */
   ins.adsbygoogle, .adsbygoogle,
-  iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="googleads"], iframe[src*="/ads/"], iframe[src*="/ad/"],
-  iframe[id^="google_ads_"], iframe[id^="aswift_"], iframe[name^="google_ads_"], iframe[name^="aswift_"],
-  div[id^="div-gpt-ad"], div[id*="google_ads"], div[id^="gpt-"], div[class*="adsbygoogle"],
-  [data-ad-slot], [data-ad-client], [data-google-query-id], [data-ad-status], [data-adsbygoogle-status],
-  [class^="GoogleActiveViewElement"],
-  /* Generic ad containers — kept SPECIFIC so they never match words like header/thread/download/loading */
-  [class*="ad-banner"], [class*="ad_banner"], [class*="adbanner"], [class*="ad-slot"], [class*="ad_slot"],
-  [class*="ad-container"], [class*="ad_container"], [class*="ad-wrapper"], [class*="ad_wrapper"],
-  [class*="ad-placeholder"], [class*="adbox"], [class*="ad-box"], [class*="ad-unit"], [class*="ad_unit"],
-  [class*="ad-region"], [class*="ad-zone"], [class*="adzone"], [class*="ad-block__"], [class*="advert-"],
-  [class*="sponsored-"], [class*="-sponsored"], [class*="sponsored_"], [class*="advertisement"], [class*="adsbox"],
-  [id^="ad-"], [id$="-ad"], [id*="-ad-"], [id^="ads-"], [id*="-ads-"], [id^="banner-ad"], [id^="adunit"], [id*="_ad_"],
-  [aria-label="Advertisement"], [aria-label="Ad"], [aria-label="advertisement"],
-  /* Native ad / content-recommendation networks */
-  .taboola, [id^="taboola-"], [class*="trc_related"], [id^="outbrain_widget"], .OUTBRAIN, [data-widget-id^="ob_"],
-  [id^="rc_"], .mgbox, [id^="mgid"], [class*="mgid"], [class*="revcontent"], [class*="content-ad"],
-  [class*="sticky-ad"], [class*="ad-sticky"], [class*="leaderboard-ad"], [class*="ad-leaderboard"], [class*="sidebar-ad"],
+  iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="/pagead/"],
+  iframe[id^="google_ads_iframe"], iframe[id^="aswift_"], iframe[name^="google_ads_iframe"],
+  div[id^="div-gpt-ad"], div[id*="google_ads_iframe"],
+  [data-ad-slot], [data-ad-client], [data-google-query-id], [data-adsbygoogle-status],
+  [aria-label="Advertisement"],
+  .taboola, [id^="taboola-"], [id^="outbrain_widget"], .OUTBRAIN,
   /* YouTube — display/promoted/banner ads ONLY (never the video player) */
   #masthead-ad, #player-ads, ytd-display-ad-renderer, ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer,
-  ytd-promoted-video-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, ytd-banner-promo-renderer-background,
-  ytd-statement-banner-renderer, ytd-companion-slot-renderer, ad-slot-renderer, .ytp-ad-overlay-container, .ytp-ad-overlay-slot,
-  ytd-rich-item-renderer:has(ytd-ad-slot-renderer) {
+  ytd-promoted-video-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, ytd-companion-slot-renderer,
+  .ytp-ad-overlay-container, .ytp-ad-overlay-slot {
     display:none !important;
   }
 `;
@@ -296,22 +286,25 @@ const AD_HIDE_CSS = `
 // ─── Ad block & HTTPS-only via webRequest ───────────────────────────────────────
 // URL substrings that indicate ad/tracker requests regardless of host (covers first-party serving).
 const AD_URL_PATTERNS = [
-  '/pagead/', '/adsbygoogle', '/doubleclick', 'googlesyndication', 'googleadservices',
-  '/gampad/', '/gpt/', '/adservice', '/ad_status', '/getads', '/adframe', '/ad_iframe',
-  'adnxs.com', '/track?', '/pixel?', '/beacon', '/collect?', 'scorecardresearch',
-  'amazon-adsystem', '/prebid', '/openrtb', '/banners/', '/sponsor', 'taboola.com', 'outbrain.com',
-  // Programmatic ad exchanges / SSPs / DSPs
-  'criteo.com', 'criteo.net', 'rubiconproject', 'pubmatic.com', 'casalemedia', 'openx.net', 'openx.com',
-  'adform.net', 'adroll.com', 'media.net', 'mgid.com', 'revcontent', 'zedo.com', 'bidswitch.net',
-  'smartadserver', 'yieldmo.com', 'sharethrough', 'teads.tv', 'indexww.com', 'gumgum.com', '33across.com',
-  'sonobi.com', '3lift.com', 'sovrn.com', 'lijit.com', 'contextweb.com', 'spotxchange', 'adsrvr.org',
-  'adsystem.com', 'adsterra', 'popads.net', 'propellerads', 'adcash', 'exoclick', 'adtech',
-  // Ad verification / viewability
-  'moatads.com', 'adsafeprotected', 'doubleverify', '/popunder', '/interstitial-ad', '/advert',
-  // Analytics / behaviour trackers (privacy)
-  'scorecardresearch.com', 'quantserve.com', 'quantcount.com', 'hotjar.com', 'mouseflow.com',
-  'fullstory.com', 'clarity.ms', 'mc.yandex.ru', 'bat.bing.com', 'analytics.tiktok.com',
-  'google-analytics.com/g/collect', 'google-analytics.com/collect', 'facebook.com/tr'
+  // ONLY unambiguous ad-serving PATHS belong here — kept tiny so they can never false-positive on
+  // real content. (Earlier generic patterns like "/gpt/", "/track?", "/collect?", "/beacon",
+  // "/sponsor", "/banners/" were silently breaking legit sites by cancelling functional requests.)
+  // Dedicated ad/tracker DOMAINS are blocked precisely by the host-filter list (section 1) instead,
+  // because substring-matching a domain (e.g. "media.net") would wrongly hit "socialmedia.network".
+  '/pagead/', '/adsbygoogle', '/gampad/', '/ad_iframe'
+];
+// Always-on precise ad/tracker HOST blocklist. Matched by hostname only (host === entry, or a
+// subdomain of it), so it is effective without the substring false-positives that broke sites.
+const AD_HOSTS = [
+  'doubleclick.net','googlesyndication.com','googleadservices.com','google-analytics.com','adservice.google.com',
+  'pagead2.googlesyndication.com','adnxs.com','amazon-adsystem.com','adsystem.com','adsrvr.org','rubiconproject.com',
+  'pubmatic.com','criteo.com','criteo.net','taboola.com','outbrain.com','casalemedia.com','openx.net','openx.com',
+  'moatads.com','serving-sys.com','advertising.com','yieldmo.com','sharethrough.com','bidswitch.net','adform.net',
+  '2mdn.net','zedo.com','bluekai.com','demdex.net','krxd.net','quantserve.com','quantcount.com','scorecardresearch.com',
+  'mgid.com','revcontent.com','adsterra.com','popads.net','propellerads.com','adcash.com','exoclick.com','teads.tv',
+  'indexww.com','gumgum.com','33across.com','sonobi.com','3lift.com','sovrn.com','lijit.com','contextweb.com',
+  'spotxchange.com','smartadserver.com','media.net','adroll.com','adsafeprotected.com','doubleverify.com','hotjar.com',
+  'fullstory.com','mouseflow.com','clarity.ms','mc.yandex.ru','bat.bing.com','analytics.tiktok.com','ads.yahoo.com','ads.linkedin.com'
 ];
 // Registrable domain (eTLD+1, simple last-two-labels heuristic) — used to tell first-party from third-party.
 function registrable(h) { if (!h) return ''; const p = h.split('.'); return p.length <= 2 ? h : p.slice(-2).join('.'); }
@@ -339,12 +332,13 @@ function applyNetworkRules() {
         if (w && !w.isDestroyed()) pageHost = new URL(w.getURL()).hostname.toLowerCase();
       } catch (e) { pageHost = ''; }
       if (host && pageHost && registrable(host) === registrable(pageHost)) return callback({});  // first-party → allow
-      // 1) hostname-based domain filters (user list)
+      // 1) hostname-based domain filters (user list) + always-on precise ad/tracker host blocklist
       if (host) {
         for (const f of filters) {
           if (f.indexOf('.') !== -1) { if (host === f || host.endsWith('.' + f)) return callback({ cancel: true }); }
           else if (host.split('.').indexOf(f) !== -1) return callback({ cancel: true });
         }
+        for (const f of AD_HOSTS) { if (host === f || host.endsWith('.' + f)) return callback({ cancel: true }); }
       }
       // 2) full-URL pattern filters (catches first-party / path-based ads), but never block media or the page itself
       if (details.resourceType !== 'media') {
@@ -442,6 +436,10 @@ ipcMain.handle('element-block-clear', (e, { host }) => {
 // Tell the active tab to enter element-pick mode.
 ipcMain.on('element-pick-start', () => {
   try { if (activeTabId && tabs[activeTabId]) tabs[activeTabId].webContents.send('pace-pick-element'); } catch (e) {}
+});
+// Cancel element-pick mode (Esc from the chrome UI, where keyboard focus usually is).
+ipcMain.on('element-pick-cancel', () => {
+  try { if (activeTabId && tabs[activeTabId]) tabs[activeTabId].webContents.send('pace-cancel-pick'); } catch (e) {}
 });
 async function loadStoredExtensions() {
   // Unpacked Chrome-extension loading was removed in 1.5.3 — Chrome MV3 extensions can't run on

@@ -76,11 +76,11 @@ body.no-anim #ambient::before,body.no-anim #ambient::after{animation:none}
 }
 .tab:hover{background:var(--glass-2);transform:translateY(-1px)}
 .tab.active{
-  background:var(--glass-2,rgba(255,255,255,.09));
-  border-color:var(--acc,#5b8ef0);
-  box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--acc,#5b8ef0) 60%,transparent), inset 0 1px 0 var(--glass-hi,rgba(255,255,255,.12)), 0 4px 14px -6px var(--acc-glow,rgba(91,142,240,.55));
+  background:var(--glass-2);
+  border:1px solid var(--acc);
+  box-shadow:inset 0 0 0 1px var(--acc), inset 0 1px 0 var(--glass-hi), 0 4px 14px -6px var(--acc-glow);
 }
-.tab.active::after{content:'';position:absolute;left:6px;right:6px;top:0;height:2px;border-radius:0 0 2px 2px;background:linear-gradient(90deg,transparent,var(--acc,#5b8ef0),var(--acc2,#a78bfa),transparent);opacity:.95}
+.tab.active::after{content:'';position:absolute;left:6px;right:6px;top:0;height:2px;border-radius:0 0 2px 2px;background:linear-gradient(90deg,transparent,var(--acc),var(--acc2),transparent);opacity:.95}
 .tab-fav{width:15px;height:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--t2)}
 .tab-fav img{width:15px;height:15px;border-radius:4px;object-fit:cover}
 .tab-title{font-size:12px;font-weight:500;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
@@ -464,9 +464,9 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
     <div id="right-tools">
       <button class="tbtn" id="tool-star" onclick="toggleBookmarkCurrent()" title="Bookmark this page (Ctrl+D)"><svg id="star-svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.8l1.8 3.9 4.2.5-3.1 2.9.85 4.2L8 11.9 4.4 13.2l.85-4.2L2.1 6.2l4.2-.5L8 1.8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
       <button class="tbtn" id="tool-downloads" onclick="toggleDownloads()" title="Downloads (Ctrl+J)"><svg width="16" height="16" viewBox="0 0 15 15" fill="none"><path d="M7.5 2v8M4.5 7.5l3 3 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12v.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-      <button class="tbtn" id="tool-extensions" onclick="toggleExtPopup()" title="Extensions"><svg width="16" height="16" viewBox="0 0 15 15" fill="none"><rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="8.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="8.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M8.5 11h5M11 8.5v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+      <button class="tbtn" id="tool-extensions" onclick="pace.newTab('pace://extensions')" title="Pace Addon Shop"><svg width="16" height="16" viewBox="0 0 15 15" fill="none"><rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="8.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="8.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M8.5 11h5M11 8.5v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
       <button class="tbtn" id="tool-apps" onclick="toggleSidebar()" title="Apps Sidebar"><svg width="16" height="16" viewBox="0 0 15 15" fill="none"><rect x="1.5" y="1.5" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 1.5v12" stroke="currentColor" stroke-width="1.4"/><path d="M8 6h3M8 9h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
-      <button class="tbtn" id="tool-history" hidden onclick="pace.navigate('pace://history')" title="History"><svg width="16" height="16" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M7.5 4v3.5l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tbtn" id="tool-history" hidden onclick="pace.newTab('pace://history')" title="History"><svg width="16" height="16" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M7.5 4v3.5l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="tbtn" id="tool-settings" onclick="toggleQuickSettings()" title="Settings"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5h7M11.5 4.5h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10.5" cy="4.5" r="1.9" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 11.5h2M6.5 11.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="5.5" cy="11.5" r="1.9" stroke="currentColor" stroke-width="1.5"/></svg></button>
     </div>
   </div>
@@ -694,7 +694,7 @@ function handleAppShortcut(action){
   if(action==='toggle-bookmarks') toggleBookmarksBarSetting();
   else if(action==='focus-address'){ const a=document.getElementById('addr'); if(a){a.focus();a.select();} }
   else if(action==='settings') pace.navigate('pace://settings');
-  else if(action==='history') pace.navigate('pace://history');
+  else if(action==='history') pace.newTab('pace://history');
   else if(action==='downloads') toggleDownloads();
   else if(action==='bookmark') toggleBookmarkCurrent();
   else if(action==='next-tab'||action==='prev-tab'){ const ids=Object.keys(tabs).map(Number); if(ids.length<2)return; let i=ids.indexOf(activeTabId); i=(action==='next-tab')?(i+1)%ids.length:(i-1+ids.length)%ids.length; pace.switchTab(ids[i]); }
@@ -728,7 +728,7 @@ function bindKeys(){
     else if(ctrl&&e.key==='w'){e.preventDefault();if(activeTabId)pace.closeTab(activeTabId);}
     else if(ctrl&&e.key==='r'){e.preventDefault();pace.reload();}
     else if(ctrl&&e.key==='l'){e.preventDefault();const a=document.getElementById('addr');a.focus();a.select();}
-    else if(ctrl&&e.key==='h'){e.preventDefault();pace.navigate('pace://history');}
+    else if(ctrl&&e.key==='h'){e.preventDefault();pace.newTab('pace://history');}
     else if(ctrl&&e.key==='j'){e.preventDefault();toggleDownloads();}
     else if(ctrl&&e.key==='d'){e.preventDefault();toggleBookmarkCurrent();}
     else if(ctrl&&(e.key===','||e.key==='e')){e.preventDefault();pace.navigate('pace://settings');}
@@ -925,13 +925,6 @@ function bindTabEvents(){
 function renderTabs(){
   const list=document.getElementById('tab-list');
   const arr=Object.values(tabs);
-  // GUARANTEE: whenever any tab exists, exactly one is active/highlighted. If activeTabId has
-  // drifted to a tab that no longer exists (or was never set), adopt the nearest real tab so the
-  // user is NEVER left with no highlighted tab. You are always on a tab; a tab is always lit.
-  if(arr.length && !tabs[activeTabId]){
-    activeTabId = arr[0].tabId;
-    try{ pace.switchTab(activeTabId); }catch(e){}   // re-sync the actual view to match the highlight
-  }
   const favHtmlFor=t=>(t.url&&t.url.startsWith('pace://'))?tabIconFor(t):(t.favicon?'<img src="'+esc(t.favicon)+'" onerror="this.style.display=\'none\'">':tabIconFor(t));
   function makeEl(t){
     const el=document.createElement('div');
@@ -964,6 +957,20 @@ function renderTabs(){
     const cur=list.children[idx];
     if(cur!==el) list.insertBefore(el, cur||null);
   });
+  // ── FOOLPROOF HIGHLIGHT GUARANTEE ──────────────────────────────────────────────
+  // Runs AFTER the DOM is built, so nothing earlier can defeat it. Forces exactly one tab to carry
+  // .active. If activeTabId doesn't resolve to a real tab element (stale/null/never-set), adopt the
+  // first tab so a tab is ALWAYS highlighted — and resync the real view to it on the next tick.
+  const allEls=[...list.querySelectorAll('.tab')];
+  if(allEls.length){
+    let activeEl=list.querySelector('.tab[data-id="'+activeTabId+'"]');
+    if(!activeEl){
+      activeEl=allEls[0];
+      const newId=Number(activeEl.dataset.id);
+      if(newId!==activeTabId){ activeTabId=newId; setTimeout(()=>{ try{ pace.switchTab(newId); }catch(e){} },0); }
+    }
+    allEls.forEach(el=>el.classList.toggle('active', el===activeEl));
+  }
   updatePlusButton();
   updateTabOverflow();
 }
@@ -1195,7 +1202,12 @@ function qsShare(btn){
     if(btn){ btn.innerHTML=ok?'✓ Link copied!':'Couldn’t share'; btn.disabled=false; setTimeout(()=>{btn.innerHTML=o;},1400); }
   });
 }
-function qsBlockElement(){ closeQuickSettings(); if(pace.pickElementToBlock){ pace.pickElementToBlock(); toast('Click an element to hide it · Esc to cancel'); } }
+function qsBlockElement(){ closeQuickSettings(); if(pace.pickElementToBlock){ pace.pickElementToBlock(); toast('Click an element to hide it · Esc to cancel');
+  // Picking starts from the toolbar, so keyboard focus is on the chrome, not the page — catch Esc
+  // here too and tell the page to cancel (the page also listens for Esc once it has focus).
+  const onEsc=(e)=>{ if(e.key==='Escape'){ window.removeEventListener('keydown',onEsc,true); try{ pace.cancelElementPick&&pace.cancelElementPick(); }catch(_){} } };
+  window.addEventListener('keydown',onEsc,true);
+} }
 function openSettingsPanel(){
   if(settingsPanelOpen)return;
   settingsPanelOpen=true;

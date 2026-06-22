@@ -87,6 +87,7 @@ contextBridge.exposeInMainWorld('pace', {
   mediaClose: () => ipcRenderer.send('media-close'),
   clearBrowsingData: () => ipcRenderer.invoke('clear-browsing-data'),
   pickElementToBlock: () => ipcRenderer.send('element-pick-start'),
+  cancelElementPick: () => ipcRenderer.send('element-pick-cancel'),
 
   // Password manager (vault) — all crypto happens in the main process
   vaultStatus: () => ipcRenderer.invoke('vault-status'),
