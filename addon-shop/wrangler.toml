@@ -4,11 +4,13 @@ name = "paceaddonshop"
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
 
-# R2 bucket for addon storage (10 GB free tier). Create it once with:
-#   wrangler r2 bucket create pace-addons
-[[r2_buckets]]
-binding = "ADDONS"
-bucket_name = "pace-addons"
+# Storage is Backblaze B2 (native API) — no Cloudflare binding needed.
+# The bucket name is public-ish config, so it can live here as a plain var:
+[vars]
+B2_BUCKET_NAME = "pace-addons"   # <-- change to the bucket name you create in Backblaze
 
-# PUBLISH_TOKEN is NOT stored here — set it as a secret so it never lands in git:
-#   wrangler secret put PUBLISH_TOKEN
+# Everything secret is set with `wrangler secret put NAME` so it never lands in git:
+#   wrangler secret put B2_KEY_ID       (your Backblaze keyID)
+#   wrangler secret put B2_APP_KEY      (your Backblaze applicationKey)
+#   wrangler secret put B2_BUCKET_ID    (the bucket's ID, shown after you create it)
+#   wrangler secret put PUBLISH_TOKEN   (any long random string; gates POST /api/publish)

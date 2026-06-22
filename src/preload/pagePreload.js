@@ -404,11 +404,35 @@ else if (window.top === window) {
       const no = mk('Not now', false);
       const yes = mk('Save', true);
       no.addEventListener('click', removeSaveBar);
-      yes.addEventListener('click', async () => { await ipcRenderer.invoke('autofill-save', { username: lastUser, password: lastPass }); removeSaveBar(); });
+      let dismissT = null;
+      const showSaved = () => { try { title.textContent = '✓ Saved to Pace'; sub.textContent = (lastUser ? lastUser + ' · ' : '') + location.hostname; btns.innerHTML = ''; } catch (e) {} if (dismissT) clearTimeout(dismissT); setTimeout(removeSaveBar, 1400); };
+      const trySave = async () => {
+        const r = await ipcRenderer.invoke('autofill-save', { username: lastUser, password: lastPass });
+        if (r && r.ok) { showSaved(); }
+        else if (r && r.reason === 'locked') { showSaveUnlock(); }
+        else { removeSaveBar(); }
+      };
+      async function showSaveUnlock() {
+        if (dismissT) clearTimeout(dismissT);   // don't auto-close while they're typing the master password
+        let helloEnabled = false; try { const q = await ipcRenderer.invoke('autofill-query'); helloEnabled = !!(q && q.helloEnabled); } catch (e) {}
+        title.textContent = '🔒 Unlock Pace to save';
+        btns.innerHTML = ''; btns.style.flexDirection = 'column'; btns.style.alignItems = 'stretch';
+        const inp = document.createElement('input'); inp.type = 'password'; inp.placeholder = 'Master password';
+        inp.style.cssText = 'width:100%;box-sizing:border-box;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:#0e0e16;color:#f1f1fb;padding:0 10px;font-size:13px;outline:none;margin-bottom:8px';
+        ['mousedown', 'click', 'keydown', 'keyup', 'keypress'].forEach(ev => inp.addEventListener(ev, e => e.stopPropagation()));
+        const err = document.createElement('div'); err.style.cssText = 'color:#f0556e;font-size:11.5px;display:none;margin-bottom:8px';
+        const ub = mk('Unlock & save', true); ub.style.width = '100%';
+        const doUnlock = async () => { const pw = inp.value; if (!pw) return; ub.textContent = 'Unlocking…'; ub.disabled = true; const u = await ipcRenderer.invoke('autofill-unlock', { masterPassword: pw }); if (u && u.ok) { await trySave(); } else { err.textContent = (u && u.reason) || 'Incorrect password.'; err.style.display = 'block'; ub.textContent = 'Unlock & save'; ub.disabled = false; inp.select(); } };
+        ub.addEventListener('click', doUnlock); inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doUnlock(); } });
+        btns.appendChild(inp); btns.appendChild(err); btns.appendChild(ub);
+        if (helloEnabled) { const hb = mk('👋 Use Windows Hello', false); hb.style.cssText += ';width:100%;margin-top:8px'; hb.addEventListener('click', async () => { hb.textContent = 'Waiting for Hello…'; hb.disabled = true; const u = await ipcRenderer.invoke('autofill-hello-unlock'); if (u && u.ok) { await trySave(); } else { err.textContent = (u && u.reason) || 'Hello failed.'; err.style.display = 'block'; hb.textContent = '👋 Use Windows Hello'; hb.disabled = false; } }); btns.appendChild(hb); }
+        setTimeout(() => { try { inp.focus(); } catch (e) {} }, 30);
+      }
+      yes.addEventListener('click', trySave);
       btns.appendChild(no); btns.appendChild(yes);
       saveBar.appendChild(title); saveBar.appendChild(sub); saveBar.appendChild(btns);
       document.body.appendChild(saveBar);
-      setTimeout(() => { if (saveBar) removeSaveBar(); }, 12000);
+      dismissT = setTimeout(() => { if (saveBar) removeSaveBar(); }, 12000);
     }
 
     function init() {

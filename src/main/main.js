@@ -265,17 +265,20 @@ const THIN_SCROLLBAR_CSS = `
 // Cosmetic ad hiding — hides common ad containers/iframes by selector when ad-block is on.
 // This complements network blocking (which stops the request) by removing leftover ad slots.
 const AD_HIDE_CSS = `
-  /* High-confidence ad units only. Deliberately conservative: NO broad substring matchers like
-     [id^="ad-"] or [class*="ad-container"], which were collapsing real page layout. The network
-     host blocklist already stops most ads from loading; this just hides the few that render. */
+  /* High-confidence, site-agnostic ad units only. Conservative on purpose. */
   ins.adsbygoogle, .adsbygoogle,
   iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="/pagead/"],
   iframe[id^="google_ads_iframe"], iframe[id^="aswift_"], iframe[name^="google_ads_iframe"],
   div[id^="div-gpt-ad"], div[id*="google_ads_iframe"],
   [data-ad-slot], [data-ad-client], [data-google-query-id], [data-adsbygoogle-status],
   [aria-label="Advertisement"],
-  .taboola, [id^="taboola-"], [id^="outbrain_widget"], .OUTBRAIN,
-  /* YouTube — display/promoted/banner ads ONLY (never the video player) */
+  .taboola, [id^="taboola-"], [id^="outbrain_widget"], .OUTBRAIN {
+    display:none !important;
+  }
+`;
+// YouTube display/promoted ads — injected ONLY on youtube.com so these id/element selectors can never
+// accidentally hide elements on other sites (e.g. an unrelated "#masthead-ad" or "#player-ads").
+const AD_HIDE_CSS_YT = `
   #masthead-ad, #player-ads, ytd-display-ad-renderer, ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer,
   ytd-promoted-video-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, ytd-companion-slot-renderer,
   .ytp-ad-overlay-container, .ytp-ad-overlay-slot {
@@ -319,6 +322,11 @@ function applyNetworkRules() {
       return callback({ redirectURL: url.replace(/^http:\/\//, 'https://') });
     }
     if (s.adBlock && details.resourceType !== 'mainFrame') {
+      // NEVER block stylesheets, fonts, or media — these are essentially never ads, and blocking one
+      // strips a page's CSS/background (text on a blank page) or breaks video. This alone fixes the
+      // "no background" sites and most "broken layout" reports.
+      const rt = details.resourceType;
+      if (rt === 'stylesheet' || rt === 'font' || rt === 'media') return callback({});
       const lower = url.toLowerCase();
       let host = '';
       try { host = new URL(url).hostname.toLowerCase(); } catch (e) { host = ''; }
@@ -577,7 +585,13 @@ function attachTabListeners(view, tabId) {
     const u = wc.getURL() || '';
     if (/^https?:|^file:/.test(u)) {
       wc.insertCSS(THIN_SCROLLBAR_CSS).catch(() => {});
-      try { if (loadSettings().adBlock && /^https?:/.test(u)) wc.insertCSS(AD_HIDE_CSS).catch(() => {}); } catch (e) {}
+      try {
+        if (loadSettings().adBlock && /^https?:/.test(u)) {
+          wc.insertCSS(AD_HIDE_CSS).catch(() => {});
+          let h = ''; try { h = new URL(u).hostname; } catch (e) {}
+          if (/(^|\.)youtube\.com$/.test(h) || /(^|\.)youtube-nocookie\.com$/.test(h)) wc.insertCSS(AD_HIDE_CSS_YT).catch(() => {});
+        }
+      } catch (e) {}
       // Hide any elements the user blocked on this site.
       try {
         let host = ''; try { host = new URL(u).hostname; } catch (e) {}

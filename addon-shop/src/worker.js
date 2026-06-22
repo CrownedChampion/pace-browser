@@ -43,40 +43,80 @@ export default {
   }
 };
 
-// ── R2 helpers ───────────────────────────────────────────────────────────────
+// ── Backblaze B2 (native API) ────────────────────────────────────────────────
+// Auth token is cached at module scope (valid ~24h) so we re-authorize rarely. Reads use the
+// download URL with the auth token, so the bucket can stay PRIVATE. Writes go through the upload-url flow.
+let _b2 = null; // { token, apiUrl, downloadUrl, ts }
+async function b2auth(env) {
+  if (_b2 && (Date.now() - _b2.ts) < 23 * 3600 * 1000) return _b2;
+  const cred = btoa(env.B2_KEY_ID + ':' + env.B2_APP_KEY);
+  const r = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', { headers: { Authorization: 'Basic ' + cred } });
+  if (!r.ok) throw new Error('B2 auth ' + r.status);
+  const d = await r.json();
+  const s = (d.apiInfo && d.apiInfo.storageApi) || {};
+  _b2 = { token: d.authorizationToken, apiUrl: s.apiUrl, downloadUrl: s.downloadUrl, ts: Date.now() };
+  return _b2;
+}
+async function b2GetText(env, name) {
+  const a = await b2auth(env);
+  const r = await fetch(a.downloadUrl + '/file/' + env.B2_BUCKET_NAME + '/' + name, { headers: { Authorization: a.token } });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('B2 get ' + r.status);
+  return await r.text();
+}
+async function b2GetStream(env, name) {
+  const a = await b2auth(env);
+  return await fetch(a.downloadUrl + '/file/' + env.B2_BUCKET_NAME + '/' + name, { headers: { Authorization: a.token } });
+}
+async function sha1hex(buf) {
+  const h = await crypto.subtle.digest('SHA-1', buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function b2Upload(env, name, bytes, contentType) {
+  const a = await b2auth(env);
+  const gu = await fetch(a.apiUrl + '/b2api/v3/b2_get_upload_url', {
+    method: 'POST', headers: { Authorization: a.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID })
+  });
+  if (!gu.ok) throw new Error('B2 get_upload_url ' + gu.status);
+  const g = await gu.json();
+  const sha1 = await sha1hex(bytes);
+  const up = await fetch(g.uploadUrl, {
+    method: 'POST', body: bytes,
+    headers: {
+      Authorization: g.authorizationToken,
+      'X-Bz-File-Name': encodeURIComponent(name),
+      'Content-Type': contentType || 'application/octet-stream',
+      'X-Bz-Content-Sha1': sha1
+    }
+  });
+  if (!up.ok) throw new Error('B2 upload ' + up.status + ' ' + (await up.text()).slice(0, 200));
+  return await up.json();
+}
+
 async function readIndex(env) {
-  try {
-    const obj = await env.ADDONS.get('index.json');
-    if (!obj) return [];
-    const txt = await obj.text();
-    const arr = JSON.parse(txt);
-    return Array.isArray(arr) ? arr : [];
-  } catch (e) { return []; }
+  try { const txt = await b2GetText(env, 'index.json'); if (!txt) return []; const arr = JSON.parse(txt); return Array.isArray(arr) ? arr : []; }
+  catch (e) { return []; }
 }
 async function writeIndex(env, arr) {
-  await env.ADDONS.put('index.json', JSON.stringify(arr, null, 2), {
-    httpMetadata: { contentType: 'application/json' }
-  });
+  await b2Upload(env, 'index.json', new TextEncoder().encode(JSON.stringify(arr, null, 2)), 'application/json');
 }
 async function readAddonMeta(env, id) {
-  try {
-    const obj = await env.ADDONS.get('addons/' + safeId(id) + '/addon.json');
-    if (!obj) return null;
-    return JSON.parse(await obj.text());
-  } catch (e) { return null; }
+  try { const txt = await b2GetText(env, 'addons/' + safeId(id) + '/addon.json'); return txt ? JSON.parse(txt) : null; }
+  catch (e) { return null; }
 }
 
 async function handleDownload(env, id) {
-  const key = 'addons/' + safeId(id) + '/' + safeId(id) + '.paceaddon';
-  const obj = await env.ADDONS.get(key);
-  if (!obj) return new Response('Addon package not found', { status: 404 });
+  const name = 'addons/' + safeId(id) + '/' + safeId(id) + '.paceaddon';
+  const r = await b2GetStream(env, name);
+  if (!r.ok) return new Response('Addon package not found', { status: 404 });
   // best-effort download counter
   try {
     const idx = await readIndex(env);
     const e = idx.find(a => a.id === id);
     if (e) { e.downloads = (e.downloads || 0) + 1; await writeIndex(env, idx); }
   } catch (e) {}
-  return new Response(obj.body, {
+  return new Response(r.body, {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': 'attachment; filename="' + safeId(id) + '.paceaddon"',
@@ -117,12 +157,8 @@ async function handlePublish(request, env) {
   };
 
   // store package + metadata
-  await env.ADDONS.put('addons/' + id + '/' + id + '.paceaddon', bytes, {
-    httpMetadata: { contentType: 'application/zip' }
-  });
-  await env.ADDONS.put('addons/' + id + '/addon.json', JSON.stringify(meta, null, 2), {
-    httpMetadata: { contentType: 'application/json' }
-  });
+  await b2Upload(env, 'addons/' + id + '/' + id + '.paceaddon', bytes, 'application/zip');
+  await b2Upload(env, 'addons/' + id + '/addon.json', new TextEncoder().encode(JSON.stringify(meta, null, 2)), 'application/json');
 
   // update catalog (preserve download count)
   const idx = await readIndex(env);
