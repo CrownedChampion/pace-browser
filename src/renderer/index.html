@@ -218,22 +218,29 @@ select.bme-inp option{color:#111;background:#fff}
   transform:translateX(-101%);transition:transform .34s var(--ease);will-change:transform;
 }
 #sidebar.open{transform:translateX(0)}
-.sb-head{height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--glass-line);flex-shrink:0}
-.sb-title{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t2)}
+.sb-head{height:54px;display:flex;align-items:center;gap:12px;padding:0 10px 0 16px;border-bottom:1px solid var(--glass-line);flex-shrink:0}
+.sb-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--t2);flex-shrink:0}
+.sb-close{flex-shrink:0}
 .ib{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t2);transition:background .15s,color .15s;border:none;background:transparent}
 .ib:hover{background:var(--hover);color:var(--t1)}
-.sb-chips{display:flex;gap:6px;padding:10px;border-bottom:1px solid var(--glass-line);overflow-x:auto;scrollbar-width:none;flex-wrap:wrap}
+.sb-chips{display:flex;align-items:center;gap:7px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex-wrap:nowrap}
 .sb-chips::-webkit-scrollbar{display:none}
-.app-chip{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 9px;border-radius:11px;cursor:pointer;border:1.5px solid transparent;transition:all .15s var(--ease)}
-.app-chip:hover{background:var(--hover);transform:translateY(-1px)}
-.app-chip.active{background:var(--acc-soft);border-color:var(--acc)}
-.app-chip-ico{font-size:18px}.app-chip-nm{font-size:8px;font-weight:600;color:var(--t3)}
-.app-chip-fav{width:22px;height:22px;border-radius:6px;object-fit:cover}
-.app-chip-fav-fallback{font-size:18px;line-height:1}
+.app-chip{flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;cursor:pointer;border:1.5px solid transparent;background:var(--glass-2);transition:transform .15s var(--ease),border-color .15s,background .15s}
+.app-chip:hover{transform:translateY(-1px);border-color:var(--glass-line)}
+.app-chip.active{background:var(--acc-soft);border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-soft)}
+.app-chip-ico{font-size:17px;display:flex;align-items:center;justify-content:center}
+.app-chip-nm{display:none}
+.app-chip-star{position:absolute;top:-4px;right:-4px;font-size:10px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.app-chip-fav{width:20px;height:20px;border-radius:6px;object-fit:cover}
+.app-chip-fav-fallback{font-size:17px;line-height:1}
 .ag-fav{width:26px;height:26px;border-radius:7px;object-fit:cover}
 .ag-fav-fallback{font-size:24px;line-height:1}
-.app-chip.active .app-chip-nm{color:var(--acc)}
-.app-chip.add{color:var(--t2)}
+.app-chip.add{color:var(--t2);background:transparent;border:1.5px dashed var(--glass-line)}
+.app-chip.add:hover{border-color:var(--acc);color:var(--acc)}
+.ag-item{position:relative}
+.ag-star{position:absolute;top:6px;right:6px;font-size:13px;opacity:.22;cursor:pointer;transition:opacity .15s,transform .15s;z-index:2}
+.ag-star:hover{opacity:.65;transform:scale(1.15)}
+.ag-star.on{opacity:1}
 #sb-content{flex:1;position:relative;overflow:hidden}
 .sb-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;padding:20px;text-align:center}
 .sb-ph-ico{font-size:34px;opacity:.25}.sb-ph-txt{font-size:12px;color:var(--t3)}
@@ -492,9 +499,9 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
 <div id="sidebar">
   <div class="sb-head">
     <div class="sb-title">Apps</div>
-    <button class="ib" onclick="toggleSidebar()"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+    <div class="sb-chips" id="sb-chips"></div>
+    <button class="ib sb-close" onclick="toggleSidebar()"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
   </div>
-  <div class="sb-chips" id="sb-chips"></div>
   <div id="sb-content">
     <div class="sb-placeholder"><div class="sb-ph-ico">✨</div><div class="sb-ph-txt">Pick an app above to open it here, or tap + to choose which apps appear.</div></div>
   </div>
@@ -591,8 +598,7 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
   </div>
 </div>
 
-<div id="toast-area"></div>
-<div id="default-card" hidden>
+<div id="toast-area"></div><div id="default-card" hidden>
   <div class="dc-row"><img id="dc-logo" src="../assets/icons/icon-64.png" alt=""><div><div class="dc-title">Make Pace your default browser?</div><div class="dc-sub">Open links and web files with Pace automatically.</div></div></div>
   <div class="dc-actions"><button class="dc-btn ghost" onclick="dismissDefaultCard()">Not now</button><button class="dc-btn primary" onclick="acceptDefaultCard()">Set as default</button></div>
 </div>
@@ -708,7 +714,7 @@ function handleAppShortcut(action){
   else if(action==='history') pace.newTab('pace://history');
   else if(action==='downloads') toggleDownloads();
   else if(action==='bookmark') toggleBookmarkCurrent();
-  else if(action==='next-tab'||action==='prev-tab'){ const ids=Object.keys(tabs).map(Number); if(ids.length<2)return; let i=ids.indexOf(activeTabId); i=(action==='next-tab')?(i+1)%ids.length:(i-1+ids.length)%ids.length; const nid=ids[i]; activeTabId=nid; renderTabs(); pace.switchTab(nid); }
+  else if(action==='next-tab'||action==='prev-tab'){ const ids=Object.keys(tabs).map(Number); if(ids.length<2)return; let i=ids.indexOf(activeTabId); i=(action==='next-tab')?(i+1)%ids.length:(i-1+ids.length)%ids.length; const nid=ids[i]; saveAddrDraft(); activeTabId=nid; renderTabs(); restoreAddrFor(nid, tabs[nid]&&tabs[nid].url); pace.switchTab(nid); }
 }
 function applyTheme(){ document.body.classList.toggle('light',settings.theme==='light'); document.body.classList.toggle('no-anim',settings.animations===false); }
 function applyAccent(){
@@ -943,7 +949,7 @@ function renderTabs(){
     el.dataset.id=t.tabId;
     el.innerHTML='<span class="tab-fav">'+favHtmlFor(t)+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>';
     el._favSig=favHtmlFor(t);
-    el.addEventListener('click',e=>{ if(e.target.closest('[data-close]'))return; const id=+el.dataset.id; if(id===activeTabId)return; activeTabId=id; renderTabs(); pace.switchTab(id); });
+    el.addEventListener('click',e=>{ if(e.target.closest('[data-close]'))return; const id=+el.dataset.id; if(id===activeTabId)return; saveAddrDraft(); activeTabId=id; renderTabs(); restoreAddrFor(id, tabs[id]&&tabs[id].url); pace.switchTab(id); });
     el.addEventListener('contextmenu',e=>{ e.preventDefault(); pace.showTabMenu(+el.dataset.id); });
     el.addEventListener('auxclick',e=>{ if(e.button===1){e.preventDefault();pace.closeTab(+el.dataset.id);} });
     const x=el.querySelector('[data-close]'); if(x)x.addEventListener('click',e=>{e.stopPropagation();pace.closeTab(+x.dataset.close);});
@@ -1000,7 +1006,7 @@ function tabIconFor(t){ if(t.url&&t.url.startsWith('pace://'))return '<svg width
 
 function setAddrBar(url,force){ const el=document.getElementById('addr'); if(force||document.activeElement!==el)el.value=url||''; document.getElementById('addr-icon').classList.toggle('secure',!!(url&&url.startsWith('https://'))); }
 function saveAddrDraft(){ const el=document.getElementById('addr'); if(!el||activeTabId==null||!tabs[activeTabId])return; if(document.activeElement===el){ tabs[activeTabId].addrDraft=el.value; } else { delete tabs[activeTabId].addrDraft; } }
-function restoreAddrFor(tabId,url){ const el=document.getElementById('addr'); const t=tabs[tabId]; if(t&&typeof t.addrDraft==='string'){ el.value=t.addrDraft; document.getElementById('addr-icon').classList.toggle('secure',false); } else { setAddrBar(url,true); } }
+function restoreAddrFor(tabId,url){ const el=document.getElementById('addr'); const t=tabs[tabId]; if(t&&typeof t.addrDraft==='string'){ el.value=t.addrDraft; document.getElementById('addr-icon').classList.toggle('secure',false); } else { const u=url||(t&&t.url)||''; setAddrBar(u==='pace://newtab'?'':u,true); } }
 function setNavBtns(back,fwd){ document.getElementById('btn-back').classList.toggle('disabled',!back); document.getElementById('btn-fwd').classList.toggle('disabled',!fwd); }
 
 function setLoading(loading){
@@ -1109,17 +1115,30 @@ function toggleSidebar(){
   sidebarOpen=!sidebarOpen;
   document.getElementById('sidebar').classList.toggle('open',sidebarOpen);
   document.getElementById('sb-trigger').classList.toggle('hidden',sidebarOpen);
-  if(!sidebarOpen)activeSbApp=null;
+  if(sidebarOpen){
+    if(!activeSbApp && settings.favoriteApp){ const f=allApps().find(a=>a.id===settings.favoriteApp); if(f && pinnedApps.includes(f.id)) activeSbApp=f.id; }
+    renderSbChips();
+  } else { activeSbApp=null; }
   pushLayout(); setTimeout(pushLayout,420);
 }
 function renderSbChips(){
   const el=document.getElementById('sb-chips');
   const pinned=allApps().filter(a=>pinnedApps.includes(a.id));
-  el.innerHTML=pinned.map(a=>'<div class="app-chip'+(activeSbApp===a.id?' active':'')+'" data-id="'+a.id+'"><span class="app-chip-ico">'+favImg(a.url,a.icon)+'</span><span class="app-chip-nm">'+esc(a.name)+'</span></div>').join('')
-    +'<div class="app-chip add" id="chip-add" title="Choose apps"><span class="app-chip-ico">＋</span><span class="app-chip-nm">Apps</span></div>';
-  el.querySelectorAll('.app-chip[data-id]').forEach(c=>c.addEventListener('click',()=>setSbApp(c.dataset.id)));
+  const fav=settings.favoriteApp;
+  el.innerHTML=pinned.map(a=>'<div class="app-chip'+(activeSbApp===a.id?' active':'')+'" data-id="'+a.id+'" title="'+esc(a.name)+(fav===a.id?' · favorite (auto-opens)':' · right-click to favorite')+'"><span class="app-chip-ico">'+favImg(a.url,a.icon)+'</span>'+(fav===a.id?'<span class="app-chip-star">⭐</span>':'')+'</div>').join('')
+    +'<div class="app-chip add" id="chip-add" title="Choose apps"><span class="app-chip-ico">＋</span></div>';
+  el.querySelectorAll('.app-chip[data-id]').forEach(c=>{
+    c.addEventListener('click',()=>setSbApp(c.dataset.id));
+    c.addEventListener('contextmenu',e=>{ e.preventDefault(); setFavoriteApp(c.dataset.id); });
+  });
   document.getElementById('chip-add').addEventListener('click',openAppPicker);
   hydrateFavicons(el);
+}
+function setFavoriteApp(id){
+  settings.favoriteApp=(settings.favoriteApp===id)?null:id;
+  pace.saveSettings(settings);
+  renderSbChips();
+  toast(settings.favoriteApp?'This app will auto-open when you click Apps':'Favorite cleared');
 }
 function setSbApp(id){
   activeSbApp=id;
@@ -1131,8 +1150,9 @@ function setSbApp(id){
 
 function openAppPicker(){
   const grid=document.getElementById('pk-grid');
-  grid.innerHTML=allApps().map(a=>'<div class="ag-item'+(pinnedApps.includes(a.id)?' sel':'')+'" data-id="'+a.id+'"><span class="ag-ico">'+favImg(a.url,a.icon,'ag-fav')+'</span><span class="ag-nm">'+esc(a.name)+'</span></div>').join('');
-  grid.querySelectorAll('.ag-item').forEach(el=>el.addEventListener('click',()=>el.classList.toggle('sel')));
+  grid.innerHTML=allApps().map(a=>'<div class="ag-item'+(pinnedApps.includes(a.id)?' sel':'')+'" data-id="'+a.id+'"><span class="ag-star'+(settings.favoriteApp===a.id?' on':'')+'" data-fav="'+a.id+'" title="Favorite — auto-opens with the Apps button">⭐</span><span class="ag-ico">'+favImg(a.url,a.icon,'ag-fav')+'</span><span class="ag-nm">'+esc(a.name)+'</span></div>').join('');
+  grid.querySelectorAll('.ag-item').forEach(el=>el.addEventListener('click',e=>{ if(e.target.closest('[data-fav]'))return; el.classList.toggle('sel'); }));
+  grid.querySelectorAll('[data-fav]').forEach(s=>s.addEventListener('click',e=>{ e.stopPropagation(); const id=s.dataset.fav; settings.favoriteApp=(settings.favoriteApp===id)?null:id; pace.saveSettings(settings); grid.querySelectorAll('[data-fav]').forEach(x=>x.classList.toggle('on',x.dataset.fav===settings.favoriteApp)); renderSbChips(); }));
   hydrateFavicons(grid);
   appPickerOpen=true;
   document.getElementById('app-picker').classList.add('show');
@@ -1255,6 +1275,7 @@ let popupAddons=[];
 function _hideExt(){ if(!extPopupOpen)return; extPopupOpen=false; document.getElementById('ext-popup').classList.remove('show'); }
 async function toggleExtPopup(){ if(extPopupOpen){ _hideExt(); endTransientIfNone(); return; } _hideQs(); _hideDl(); extPopupOpen=true; document.getElementById('ext-popup').classList.add('show'); try{ popupAddons=await pace.getAddons()||[]; }catch(e){ popupAddons=[]; } renderExtPopup(); showFrostIfNeeded(); }
 function closeExtPopup(){ if(!extPopupOpen)return; _hideExt(); endTransientIfNone(); }
+
 const EP_STAR='<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.6 3.6 3.9.4-2.9 2.6.8 3.8L8 11.1 4.6 12.8l.8-3.8L2.5 6.4l3.9-.4L8 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
 function epIco(ext){ return (ext.icon&&ext.icon.indexOf('data:')===0)?'<img src="'+esc(ext.icon)+'" alt="">':'🧩'; }
 function renderExtPopup(){

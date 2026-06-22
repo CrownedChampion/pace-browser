@@ -1045,7 +1045,6 @@ ipcMain.on('reload', () => { if (activeTabId && tabs[activeTabId]) tabs[activeTa
 ipcMain.on('stop-loading', () => { if (activeTabId && tabs[activeTabId]) tabs[activeTabId].webContents.stop(); });
 
 ipcMain.on('set-page-bounds', (e, { bounds }) => setPageBounds(bounds));
-// Snapshot the active page so the chrome can freeze it behind a floating menu (overlay menus).
 ipcMain.handle('capture-page', async () => {
   try { if (activeTabId && tabs[activeTabId]) { const img = await tabs[activeTabId].webContents.capturePage(); return img.toDataURL(); } } catch (e) {}
   return '';
