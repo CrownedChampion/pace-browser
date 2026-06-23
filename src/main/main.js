@@ -767,15 +767,35 @@ function formatUrl(u) {
   return u;
 }
 
+// Authoritative view-side analogue of the deterministic tab-highlight pass: make the page area show
+// EXACTLY the active tab — detach every other tab view, attach the active one with correct bounds, and
+// force a repaint. A re-attached BrowserView can otherwise stay blank until a resize, which is the
+// "page goes blank on close" bug. This runs after every switch and every close.
+function showActiveTab() {
+  if (!mainWindow) return;
+  const ids = Object.keys(tabs).map(Number);
+  if (!ids.length) return;
+  if (!activeTabId || !tabs[activeTabId]) activeTabId = ids[ids.length - 1];
+  for (const id of ids) {
+    if (id === activeTabId) continue;
+    const v = tabs[id]; if (!v) continue;
+    if (!tabMeta[id] || !tabMeta[id].detached) { try { mainWindow.removeBrowserView(v); } catch (e) {} if (tabMeta[id]) tabMeta[id].detached = true; }
+  }
+  const view = tabs[activeTabId];
+  try { mainWindow.addBrowserView(view); } catch (e) {}
+  if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
+  let b = lastPageBounds;
+  if (!b) { try { const cb = mainWindow.getContentBounds(); b = { x: 0, y: CHROME_H, width: cb.width, height: Math.max(120, cb.height - CHROME_H) }; } catch (e) { b = { x: 0, y: CHROME_H, width: 1200, height: 600 }; } }
+  try { view.setBounds(b); } catch (e) {}
+  try { view.webContents.invalidate(); } catch (e) {}
+  const target = view;
+  setTimeout(() => { try { if (tabs[activeTabId] === target) { target.setBounds(b); target.webContents.invalidate(); } } catch (e) {} }, 16);
+}
 function switchTab(tabId) {
   if (!tabs[tabId]) return;
-  if (activeTabId && tabs[activeTabId] && tabMeta[activeTabId] && !tabMeta[activeTabId].detached) mainWindow.removeBrowserView(tabs[activeTabId]);
   activeTabId = tabId;
   if (tabMeta[tabId]) tabMeta[tabId].detached = false;
-  mainWindow.addBrowserView(tabs[tabId]);
-  // Re-apply the last known page bounds right away so the view paints at the correct size immediately
-  // instead of showing blank until the renderer happens to push a fresh layout.
-  if (lastPageBounds) { try { tabs[tabId].setBounds(lastPageBounds); } catch (e) {} }
+  showActiveTab();
   const wc = tabs[tabId].webContents;
   try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(wc); } catch (e) {}
   mainWindow.webContents.send('tab-switched', { tabId, url: formatUrl(wc.getURL()), title: wc.getTitle(), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
@@ -791,19 +811,16 @@ function closeTab(tabId) {
     const u = formatUrl(tabs[tabId].webContents.getURL());
     if (u && u !== 'pace://newtab') { closedTabs.push(u); if (closedTabs.length > 25) closedTabs.shift(); }
   } catch (e) {}
-  if (wasActive && tabMeta[tabId] && !tabMeta[tabId].detached) mainWindow.removeBrowserView(tabs[tabId]);
   const closingView = tabs[tabId];
+  if (tabMeta[tabId] && !tabMeta[tabId].detached) { try { mainWindow.removeBrowserView(closingView); } catch (e) {} }
   delete tabs[tabId]; delete tabMeta[tabId];
   mainWindow.webContents.send('tab-closed', { tabId });
   if (wasActive) {
     const ids = Object.keys(tabs).map(Number);
-    if (ids.length) switchTab(ids[Math.max(0, idx - 1)]);   // go to the neighbor (prefer the left one)
+    if (ids.length) switchTab(ids[Math.max(0, idx - 1)]);   // switchTab → showActiveTab attaches + repaints the neighbour
     else { activeTabId = null; createTab('pace://newtab'); }
-  } else if (closingView) {
-    try { mainWindow.removeBrowserView(closingView); } catch (e) {}
   }
-  // Tear down the closed page on the NEXT tick — destroying it synchronously, before the neighbour
-  // view had been added and shown, was leaving the newly-active tab blank until another tab was clicked.
+  // Destroy the closed page on the next tick, after the neighbour view has been shown.
   setTimeout(() => { try { closingView.webContents.destroy(); } catch (e) {} }, 0);
   ensureTab();
 }
