@@ -718,13 +718,14 @@ function makeTabView() {
 function createTab(tabUrl = 'pace://newtab', background = false) {
   const tabId = ++tabCounter;
   const view = makeTabView();
-  tabs[tabId] = view; tabMeta[tabId] = { detached: true };   // not on-screen until showActiveTab attaches it
+  tabs[tabId] = view; tabMeta[tabId] = { detached: false };
   attachTabListeners(view, tabId);
 
   if (!background) {
     activeTabId = tabId;
-    if (tabMeta[tabId]) tabMeta[tabId].detached = false;
-    showActiveTab();   // one coherent path: detach others, attach the new view, set bounds + repaint
+    showActiveTab();        // brings the new view on-screen and parks the others
+  } else {
+    parkView(view);         // attached but off-screen — painting in the background, instant to switch to
   }
   navigateView(view, tabUrl);
   mainWindow.webContents.send('tab-created', { tabId, url: formatUrl(tabUrl), active: !background });
@@ -768,41 +769,42 @@ function formatUrl(u) {
   return u;
 }
 
-// Authoritative view-side analogue of the deterministic tab-highlight pass: make the page area show
-// EXACTLY the active tab — detach every other tab view, attach the active one with correct bounds, and
-// force a repaint. A re-attached BrowserView can otherwise stay blank until a resize, which is the
-// "page goes blank on close" bug. This runs after every switch and every close.
+// ── Tab view presentation ────────────────────────────────────────────────────
+// Reliability model: every tab view stays ATTACHED to the window for its whole life. The active tab
+// sits at the real on-screen bounds; inactive tabs are parked far OFF-SCREEN (same size, still painting
+// because backgroundThrottling is off). "Switching" is therefore just moving an already-painted layer
+// on/off screen — it is instant, smooth, and can never show a blank page (the old detach→re-attach path
+// left re-attached views blank until a resize). `pageHidden` is set when a floating menu wants the page
+// hidden behind the frozen snapshot; then even the active view is parked off-screen.
+let pageHidden = false;
+function onscreenBounds() {
+  if (lastPageBounds) return lastPageBounds;
+  try { const cb = mainWindow.getContentBounds(); return { x: 0, y: CHROME_H, width: cb.width, height: Math.max(120, cb.height - CHROME_H) }; }
+  catch (e) { return { x: 0, y: CHROME_H, width: 1200, height: 600 }; }
+}
+function offscreenBounds() { const b = onscreenBounds(); return { x: -40000, y: b.y, width: b.width, height: b.height }; }
+function parkView(view) {
+  if (!view) return;
+  try { mainWindow.addBrowserView(view); } catch (e) {}
+  try { view.setBounds(offscreenBounds()); } catch (e) {}
+}
 function showActiveTab() {
   if (!mainWindow) return;
   const ids = Object.keys(tabs).map(Number);
   if (!ids.length) return;
   if (!activeTabId || !tabs[activeTabId]) activeTabId = ids[ids.length - 1];
+  // Park every non-active tab off-screen (kept attached so it stays painted and switches in instantly).
   for (const id of ids) {
     if (id === activeTabId) continue;
     const v = tabs[id]; if (!v) continue;
-    if (!tabMeta[id] || !tabMeta[id].detached) { try { mainWindow.removeBrowserView(v); } catch (e) {} if (tabMeta[id]) tabMeta[id].detached = true; }
+    parkView(v);
+    if (tabMeta[id]) tabMeta[id].detached = false;
   }
+  // Place the active tab: on-screen normally, or parked if a menu is currently covering the page.
   const view = tabs[activeTabId];
   try { mainWindow.addBrowserView(view); } catch (e) {}
   if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
-  let b = lastPageBounds;
-  if (!b) { try { const cb = mainWindow.getContentBounds(); b = { x: 0, y: CHROME_H, width: cb.width, height: Math.max(120, cb.height - CHROME_H) }; } catch (e) { b = { x: 0, y: CHROME_H, width: 1200, height: 600 }; } }
-  try { view.setBounds(b); } catch (e) {}
-  try { view.webContents.invalidate(); } catch (e) {}
-  // Force a genuine relayout one tick later. A re-attached BrowserView can stay BLANK until its bounds
-  // actually CHANGE — re-setting identical bounds is a no-op the compositor ignores. So snap to a 1px-
-  // shorter box and then to the real (latest) bounds. This is the reliable cure for the blank page on
-  // tab switch / close, and it uses the freshest bounds in case the renderer just re-laid-out.
-  const target = view;
-  setTimeout(() => {
-    try {
-      if (tabs[activeTabId] !== target) return;
-      const cur = lastPageBounds || b;
-      target.setBounds({ x: cur.x, y: cur.y, width: cur.width, height: Math.max(1, cur.height - 1) });
-      target.setBounds(cur);
-      target.webContents.invalidate();
-    } catch (e) {}
-  }, 16);
+  try { view.setBounds(pageHidden ? offscreenBounds() : onscreenBounds()); } catch (e) {}
 }
 function switchTab(tabId) {
   if (!tabs[tabId]) return;
@@ -861,19 +863,24 @@ function duplicateTab(tabId) {
 }
 
 // ─── Layout (renderer-driven) ───────────────────────────────────────────────────
-let lastPageBounds = null;   // remembered page-view bounds, re-applied on tab switch so it paints instantly
+let lastPageBounds = null;   // remembered on-screen page bounds, reused so a parked view returns to the right place
 function setPageBounds(bounds) {
   if (!activeTabId || !tabs[activeTabId]) return;
   const view = tabs[activeTabId];
-  const meta = tabMeta[activeTabId];
   if (bounds === null) {
-    if (!meta.detached) { mainWindow.removeBrowserView(view); meta.detached = true; }
+    // A floating menu wants the page hidden behind the frozen snapshot: keep the view ATTACHED but park
+    // it off-screen. (Never removeBrowserView here — re-attaching later was the source of blank pages.)
+    pageHidden = true;
+    parkView(view);
+    if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
     return;
   }
-  if (meta.detached) { mainWindow.addBrowserView(view); meta.detached = false; }
+  pageHidden = false;
   const b = { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.max(120, Math.round(bounds.width)), height: Math.max(120, Math.round(bounds.height)) };
   lastPageBounds = b;
-  view.setBounds(b);
+  try { mainWindow.addBrowserView(view); } catch (e) {}
+  if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
+  try { view.setBounds(b); } catch (e) {}
 }
 
 function setSidebarView(payload) {
@@ -980,12 +987,13 @@ function navigateTab(tabId, rawUrl) {
     }
     // Adopt the warmed-up view
     const wasActive = activeTabId === tid;
-    const wasDetached = tabMeta[tid].detached;
-    if (wasActive && !wasDetached) mainWindow.removeBrowserView(tabs[tid]);
+    try { mainWindow.removeBrowserView(tabs[tid]); } catch (e) {}
     try { tabs[tid].webContents.destroy(); } catch (e) {}
     tabs[tid] = pv;
+    if (!tabMeta[tid]) tabMeta[tid] = { detached: false };
     attachTabListeners(pv, tid);
-    if (wasActive && !wasDetached) { mainWindow.addBrowserView(pv); }
+    if (wasActive) showActiveTab();   // place the warmed-up view on-screen and park the rest
+    else parkView(pv);                // keep it attached but parked off-screen, painted and ready
     const wc = pv.webContents;
     mainWindow.webContents.send('tab-update', { tabId: tid, url: formatUrl(wc.getURL() || normalized), title: wc.getTitle(), loading: wc.isLoading(), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
     // ask renderer to re-apply bounds for the new view

@@ -975,11 +975,11 @@ function bindTabEvents(){
   pace.on('tab-created',({tabId,url,active})=>{ if(active)saveAddrDraft(); tabs[tabId]={tabId,url:url||'pace://newtab',title:'New Tab',loading:false}; if(active)activeTabId=tabId; renderTabs(); if(active){setAddrBar(url,true);pushLayout();} });
   pace.on('tab-closed',({tabId,activeId})=>{
     delete tabs[tabId];
-    // Main is the single source of truth for which tab is active — adopt it, don't guess a neighbour.
-    if(activeId!=null && tabs[activeId]) activeTabId=activeId;
-    else if(activeTabId==null || !tabs[activeTabId]){ const r=Object.keys(tabs).map(Number); activeTabId=r.length?r[0]:null; }
+    // Main is the single source of truth for the active tab. Adopt exactly what it sends — never guess.
+    if(activeId!=null) activeTabId=activeId;
+    else if(!tabs[activeTabId]) activeTabId=null;   // last tab closed; main is creating a fresh one
     renderTabs();
-    // Address bar + page layout for an active-tab change are refreshed by the tab-switched that follows.
+    // The address bar + page layout for the new active tab arrive via the tab-switched that follows.
   });
   pace.on('tab-switched',({tabId,url,title,canGoBack,canGoForward})=>{ saveAddrDraft(); activeTabId=tabId; if(tabs[tabId]&&title)tabs[tabId].title=title; renderTabs(); restoreAddrFor(tabId,url); setNavBtns(canGoBack,canGoForward); currentUrl=url||''; currentTitle=title||(tabs[tabId]&&tabs[tabId].title)||''; updateStar(); pushLayout(); });
   pace.on('tab-update',d=>{ if(!tabs[d.tabId])return; Object.assign(tabs[d.tabId],d); renderTabs(); if(d.tabId===activeTabId){ if(d.url!==undefined){setAddrBar(d.url);currentUrl=d.url;} if(d.title!==undefined)currentTitle=d.title; if(d.canGoBack!==undefined)setNavBtns(d.canGoBack,d.canGoForward); updateStar();} });
@@ -1036,21 +1036,11 @@ function renderTabs(){
     const cur=list.children[idx];
     if(cur!==el) list.insertBefore(el, cur||null);
   });
-  // ── FOOLPROOF HIGHLIGHT GUARANTEE ──────────────────────────────────────────────
-  // Runs AFTER the DOM is built, so nothing earlier can defeat it. Forces exactly one tab to carry
-  // .active. If activeTabId doesn't resolve to a real tab element (stale/null/never-set), adopt the
-  // first tab so a tab is ALWAYS highlighted — and resync the real view to it on the next tick.
-  const allEls=[...list.querySelectorAll('.tab')];
-  if(allEls.length){
-    let activeEl=list.querySelector('.tab[data-id="'+activeTabId+'"]');
-    if(!activeEl){
-      // activeTabId didn't resolve to a rendered tab — a transient desync. Light up the first tab so one
-      // is always highlighted, but do NOT force a real switch here: main is the single source of truth and
-      // will send the correct tab-switched. Calling switchTab from here would yank the page to the wrong tab.
-      activeEl=allEls[0];
-    }
-    allEls.forEach(el=>el.classList.toggle('active', el===activeEl));
-  }
+  // ── HIGHLIGHT: strictly mirror the active tab the MAIN process chose ────────────
+  // Light up exactly the tab whose id is activeTabId — never adopt the first tab as a fallback (that
+  // was what made the page jump to tab 1). If activeTabId is briefly between values, no tab is lit for
+  // that instant and the very next event (tab-switched / tab-created) corrects it.
+  [...list.querySelectorAll('.tab')].forEach(el=>el.classList.toggle('active', Number(el.dataset.id)===activeTabId));
   updatePlusButton();
   updateTabOverflow();
 }
