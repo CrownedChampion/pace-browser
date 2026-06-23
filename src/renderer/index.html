@@ -1044,9 +1044,10 @@ function renderTabs(){
   if(allEls.length){
     let activeEl=list.querySelector('.tab[data-id="'+activeTabId+'"]');
     if(!activeEl){
+      // activeTabId didn't resolve to a rendered tab — a transient desync. Light up the first tab so one
+      // is always highlighted, but do NOT force a real switch here: main is the single source of truth and
+      // will send the correct tab-switched. Calling switchTab from here would yank the page to the wrong tab.
       activeEl=allEls[0];
-      const newId=Number(activeEl.dataset.id);
-      if(newId!==activeTabId){ activeTabId=newId; setTimeout(()=>{ try{ pace.switchTab(newId); }catch(e){} },0); }
     }
     allEls.forEach(el=>el.classList.toggle('active', el===activeEl));
   }

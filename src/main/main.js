@@ -718,7 +718,7 @@ function makeTabView() {
 function createTab(tabUrl = 'pace://newtab', background = false) {
   const tabId = ++tabCounter;
   const view = makeTabView();
-  tabs[tabId] = view; tabMeta[tabId] = { detached: false };
+  tabs[tabId] = view; tabMeta[tabId] = { detached: true };   // not on-screen until showActiveTab attaches it
   attachTabListeners(view, tabId);
 
   if (!background) {
@@ -789,8 +789,20 @@ function showActiveTab() {
   if (!b) { try { const cb = mainWindow.getContentBounds(); b = { x: 0, y: CHROME_H, width: cb.width, height: Math.max(120, cb.height - CHROME_H) }; } catch (e) { b = { x: 0, y: CHROME_H, width: 1200, height: 600 }; } }
   try { view.setBounds(b); } catch (e) {}
   try { view.webContents.invalidate(); } catch (e) {}
+  // Force a genuine relayout one tick later. A re-attached BrowserView can stay BLANK until its bounds
+  // actually CHANGE — re-setting identical bounds is a no-op the compositor ignores. So snap to a 1px-
+  // shorter box and then to the real (latest) bounds. This is the reliable cure for the blank page on
+  // tab switch / close, and it uses the freshest bounds in case the renderer just re-laid-out.
   const target = view;
-  setTimeout(() => { try { if (tabs[activeTabId] === target) { target.setBounds(b); target.webContents.invalidate(); } } catch (e) {} }, 16);
+  setTimeout(() => {
+    try {
+      if (tabs[activeTabId] !== target) return;
+      const cur = lastPageBounds || b;
+      target.setBounds({ x: cur.x, y: cur.y, width: cur.width, height: Math.max(1, cur.height - 1) });
+      target.setBounds(cur);
+      target.webContents.invalidate();
+    } catch (e) {}
+  }, 16);
 }
 function switchTab(tabId) {
   if (!tabs[tabId]) return;
