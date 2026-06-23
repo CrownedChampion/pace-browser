@@ -720,10 +720,9 @@ function createTab(tabUrl = 'pace://newtab', background = false) {
   attachTabListeners(view, tabId);
 
   if (!background) {
-    if (activeTabId && tabs[activeTabId]) mainWindow.removeBrowserView(tabs[activeTabId]);
     activeTabId = tabId;
-    mainWindow.addBrowserView(view);
-    view.setBounds({ x: 0, y: CHROME_H, width: 1200, height: 600 });
+    if (tabMeta[tabId]) tabMeta[tabId].detached = false;
+    showActiveTab();   // one coherent path: detach others, attach the new view, set bounds + repaint
   }
   navigateView(view, tabUrl);
   mainWindow.webContents.send('tab-created', { tabId, url: formatUrl(tabUrl), active: !background });
@@ -804,8 +803,8 @@ function switchTab(tabId) {
 function closeTab(tabId) {
   if (!tabs[tabId]) return;
   const wasActive = activeTabId === tabId;
-  const orderBefore = Object.keys(tabs).map(Number);
-  const idx = orderBefore.indexOf(tabId);
+  const order = Object.keys(tabs).map(Number);   // numeric id order == left-to-right tab order
+  const idx = order.indexOf(tabId);
   // Remember the closed tab's URL so it can be reopened (skip blank/new tabs)
   try {
     const u = formatUrl(tabs[tabId].webContents.getURL());
@@ -814,11 +813,19 @@ function closeTab(tabId) {
   const closingView = tabs[tabId];
   if (tabMeta[tabId] && !tabMeta[tabId].detached) { try { mainWindow.removeBrowserView(closingView); } catch (e) {} }
   delete tabs[tabId]; delete tabMeta[tabId];
-  mainWindow.webContents.send('tab-closed', { tabId });
+  // Decide the next active tab HERE (single source of truth): the tab to the RIGHT of the closed one,
+  // or the new right-most if it was last — exactly how a normal browser behaves. Removing index `idx`
+  // shifts the former right neighbour into position `idx`.
+  let target = null;
   if (wasActive) {
-    const ids = Object.keys(tabs).map(Number);
-    if (ids.length) switchTab(ids[Math.max(0, idx - 1)]);   // switchTab → showActiveTab attaches + repaints the neighbour
-    else { activeTabId = null; createTab('pace://newtab'); }
+    const rest = Object.keys(tabs).map(Number);
+    if (rest.length) target = (idx < rest.length) ? rest[idx] : rest[rest.length - 1];
+  }
+  // Tell the renderer which tab is closing AND which one is now active — it adopts this, it does not guess.
+  mainWindow.webContents.send('tab-closed', { tabId, activeId: wasActive ? target : activeTabId });
+  if (wasActive) {
+    if (target != null) switchTab(target);                 // switchTab → showActiveTab attaches + repaints
+    else { activeTabId = null; createTab('pace://newtab'); } // closed the last tab
   }
   // Destroy the closed page on the next tick, after the neighbour view has been shown.
   setTimeout(() => { try { closingView.webContents.destroy(); } catch (e) {} }, 0);

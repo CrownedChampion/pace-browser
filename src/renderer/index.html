@@ -252,7 +252,7 @@ select.bme-inp option{color:#111;background:#fff}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 #dl-drawer{
-  position:fixed;right:0;top:var(--chrome-h);bottom:0;width:300px;z-index:800;
+  position:fixed;right:0;top:var(--chrome-h);bottom:0;width:300px;z-index:1100;
   display:flex;flex-direction:column;overflow:hidden;border-radius:var(--r-lg) 0 0 var(--r-lg);
   background:var(--glass-2);
   -webkit-backdrop-filter:blur(40px) saturate(var(--glass-sat));backdrop-filter:blur(40px) saturate(var(--glass-sat));
@@ -435,12 +435,23 @@ body.light #qs, body.light #ext-popup, body.light #sidebar, body.light #dl-drawe
 .qs-row .toggle,.qs-row{transition:background .16s}
 button,.tbtn,.media-btn,.tab,.bm-item,.tab-plus,.app-chip{will-change:transform}
 
-body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !important}</style>
+body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !important}
+#update-toast{position:fixed;right:18px;bottom:18px;z-index:1200;display:flex;align-items:center;gap:13px;max-width:344px;padding:13px 14px 13px 16px;border-radius:15px;background:var(--glass-2);-webkit-backdrop-filter:blur(40px) saturate(var(--glass-sat));backdrop-filter:blur(40px) saturate(var(--glass-sat));border:1px solid var(--glass-line);box-shadow:0 18px 48px -12px rgba(0,0,0,.55);transform:translateY(150%);opacity:0;transition:transform .42s var(--ease),opacity .3s;pointer-events:none}
+#update-toast.show{transform:translateY(0);opacity:1;pointer-events:auto}
+#update-toast .ut-dot{width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 4px var(--acc-soft);flex-shrink:0}
+#update-toast .ut-txt{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+#update-toast .ut-txt b{font-size:13px;font-weight:650;letter-spacing:-.01em}
+#update-toast .ut-txt span{font-size:11.5px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#update-toast .ut-btn{flex-shrink:0;border:none;background:var(--acc);color:#fff;font-family:var(--font);font-weight:600;font-size:12.5px;padding:8px 15px;border-radius:10px;cursor:pointer;transition:filter .15s}
+#update-toast .ut-btn:hover{filter:brightness(1.1)}
+#update-toast .ut-x{flex-shrink:0;width:26px;height:26px;border:none;background:transparent;color:var(--t3);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .14s,color .14s}
+#update-toast .ut-x:hover{background:var(--hover);color:var(--t1)}</style>
 </head>
 <body>
 <div id="ambient"></div>
 <!-- Frozen snapshot of the page, shown behind a floating menu so menus hover over the page instead of shrinking it -->
 <div id="page-frost"></div>
+<div id="update-toast"><div class="ut-dot"></div><div class="ut-txt"><b>Update ready</b><span id="ut-ver">A new version is ready to install.</span></div><button class="ut-btn" id="ut-restart">Restart</button><button class="ut-x" id="ut-dismiss" title="Later"><svg width="9" height="9" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>
 
 <div id="chrome">
   <div id="tab-row">
@@ -718,6 +729,9 @@ async function init(){
   pace.on('download-started',dl=>{ downloadsList.unshift(dl); renderDownloads(); if(!dlOpen) toggleDownloads(); toast('⬇ '+dl.filename); });
   pace.on('download-progress',({id,received,total})=>{ const dl=downloadsList.find(d=>d.id===id); if(dl){dl.received=received;dl.total=total;} const el=document.getElementById('dl-'+id); if(el&&total){const b=el.querySelector('.dl-bar'); if(b)b.style.width=Math.round(received/total*100)+'%';} });
   pace.on('download-done',({id,state,savePath})=>{ const dl=downloadsList.find(d=>d.id===id); if(dl){dl.state=state;dl.savePath=savePath;} renderDownloads(); if(state==='completed') toast('✅ Download complete','ok'); });
+  // A finished update surfaces its own restart prompt in the main window (no need to dig into Settings).
+  pace.on('update-status',s=>{ if(!s)return; const t=document.getElementById('update-toast'); if(t&&s.state==='downloaded'){ const v=document.getElementById('ut-ver'); if(v)v.textContent=s.version?('Version '+s.version+' is ready to install.'):'A new version is ready to install.'; t.classList.add('show'); } });
+  { const rb=document.getElementById('ut-restart'); if(rb)rb.addEventListener('click',()=>{ try{pace.quitAndInstall();}catch(e){} }); const db=document.getElementById('ut-dismiss'); if(db)db.addEventListener('click',()=>{ const t=document.getElementById('update-toast'); if(t)t.classList.remove('show'); }); }
 
   window.addEventListener('resize',()=>{ syncChromeHeight(); pushLayout(); updatePlusButton(); });
   syncChromeHeight();
@@ -943,12 +957,13 @@ function handleBookmarkAction(action,index){
 
 function bindTabEvents(){
   pace.on('tab-created',({tabId,url,active})=>{ if(active)saveAddrDraft(); tabs[tabId]={tabId,url:url||'pace://newtab',title:'New Tab',loading:false}; if(active)activeTabId=tabId; renderTabs(); if(active){setAddrBar(url,true);pushLayout();} });
-  pace.on('tab-closed',({tabId})=>{
-    const wasActive=(tabId===activeTabId);
-    const ids=Object.keys(tabs).map(Number); const idx=ids.indexOf(tabId);
+  pace.on('tab-closed',({tabId,activeId})=>{
     delete tabs[tabId];
-    if(wasActive){ const rest=Object.keys(tabs).map(Number); activeTabId = rest.length ? rest[Math.max(0,idx-1)] : null; }  // prefer the tab to the left
+    // Main is the single source of truth for which tab is active — adopt it, don't guess a neighbour.
+    if(activeId!=null && tabs[activeId]) activeTabId=activeId;
+    else if(activeTabId==null || !tabs[activeTabId]){ const r=Object.keys(tabs).map(Number); activeTabId=r.length?r[0]:null; }
     renderTabs();
+    // Address bar + page layout for an active-tab change are refreshed by the tab-switched that follows.
   });
   pace.on('tab-switched',({tabId,url,title,canGoBack,canGoForward})=>{ saveAddrDraft(); activeTabId=tabId; if(tabs[tabId]&&title)tabs[tabId].title=title; renderTabs(); restoreAddrFor(tabId,url); setNavBtns(canGoBack,canGoForward); currentUrl=url||''; currentTitle=title||(tabs[tabId]&&tabs[tabId].title)||''; updateStar(); pushLayout(); });
   pace.on('tab-update',d=>{ if(!tabs[d.tabId])return; Object.assign(tabs[d.tabId],d); renderTabs(); if(d.tabId===activeTabId){ if(d.url!==undefined){setAddrBar(d.url);currentUrl=d.url;} if(d.title!==undefined)currentTitle=d.title; if(d.canGoBack!==undefined)setNavBtns(d.canGoBack,d.canGoForward); updateStar();} });

@@ -150,9 +150,12 @@ async function handlePublish(request, env) {
   if (!file || typeof file.arrayBuffer !== 'function') {
     return cors(jsonResponse({ ok: false, error: 'A .paceaddon package file is required.' }, 400));
   }
+  if (!/\.paceaddon$/i.test(String(file.name || ''))) {
+    return cors(jsonResponse({ ok: false, error: 'Only .paceaddon files can be uploaded.' }, 400));
+  }
   const bytes = await file.arrayBuffer();
   if (bytes.byteLength === 0) return cors(jsonResponse({ ok: false, error: 'The package file is empty.' }, 400));
-  if (bytes.byteLength > 10 * 1024 * 1024) return cors(jsonResponse({ ok: false, error: 'Package too large (max 10 MB).' }, 400));
+  if (bytes.byteLength > 5 * 1024 * 1024) return cors(jsonResponse({ ok: false, error: 'Package too large (max 5 MB).' }, 400));
 
   const now = new Date().toISOString();
   // Public metadata (served to the storefront) — never includes the developer's email.
@@ -330,8 +333,8 @@ function publishPage() {
     <input type="text" id="name" placeholder="My Addon">
     <label>Description</label>
     <textarea id="description" placeholder="What does it do?"></textarea>
-    <label>Package <span class="opt">(.paceaddon — a zip of your addon folder)</span></label>
-    <input type="file" id="file" accept=".paceaddon,.zip">
+    <label>Package <span class="opt">(.paceaddon only — max 5 MB)</span></label>
+    <input type="file" id="file" accept=".paceaddon">
 
     <div class="sechead">Authorization</div>
     <label>Publish token</label>
@@ -362,6 +365,8 @@ function publishPage() {
       if(!$('id').value.trim()){ return fail('Enter an addon ID.'); }
       if(!$('name').value.trim()){ return fail('Enter an addon name.'); }
       if(!f){ return fail('Choose a .paceaddon file.'); }
+      if(!/\\.paceaddon$/i.test(f.name)){ return fail('Only .paceaddon files can be uploaded.'); }
+      if(f.size>5*1024*1024){ return fail('Package too large (max 5 MB).'); }
       if(!$('agree').checked){ return fail('You must accept the Developer Agreement.'); }
       if(!$('token').value){ return fail('Enter your publish token.'); }
       const fd=new FormData();
