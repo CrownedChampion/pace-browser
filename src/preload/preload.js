@@ -68,6 +68,14 @@ contextBridge.exposeInMainWorld('pace', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   quitAndInstall: () => ipcRenderer.send('quit-and-install'),
 
+  // Pace Themes (.pacetheme)
+  themesList:    () => ipcRenderer.invoke('themes-list'),
+  themesActive:  () => ipcRenderer.invoke('themes-active'),
+  themesApply:   (id) => ipcRenderer.invoke('themes-apply', id),
+  themesReset:   () => ipcRenderer.invoke('themes-reset'),
+  themesInstall: (doc) => ipcRenderer.invoke('themes-install', doc),
+  themesRemove:  (id) => ipcRenderer.invoke('themes-remove', id),
+
   // Bookmarks bar: import + context menu
   importBookmarks: (source) => ipcRenderer.invoke('import-bookmarks', { source }),
   showBookmarksBarMenu: () => ipcRenderer.send('show-bookmarks-bar-menu'),
@@ -105,7 +113,7 @@ contextBridge.exposeInMainWorld('pace', {
 
   on: (channel, fn) => {
     const allowed = ['tab-created', 'tab-closed', 'tab-switched', 'tab-update', 'tab-loading',
-      'download-started', 'download-progress', 'download-done', 'window-state', 'settings-changed', 'relayout', 'settings-panel-closed', 'bookmark-action', 'media-update', 'app-shortcut', 'sidebar-app-closed', 'update-status', 'ask-default-browser', 'bm-bar-action'];
+      'download-started', 'download-progress', 'download-done', 'window-state', 'settings-changed', 'relayout', 'settings-panel-closed', 'bookmark-action', 'media-update', 'app-shortcut', 'sidebar-app-closed', 'update-status', 'ask-default-browser', 'bm-bar-action', 'theme-changed'];
     if (!allowed.includes(channel)) return;
     const w = (e, ...args) => fn(...args);
     ipcRenderer.on(channel, w);

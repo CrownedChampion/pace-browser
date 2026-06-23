@@ -583,6 +583,7 @@ body.no-anim *{animation-duration:.01ms !important;transition-duration:.05ms !im
   <div class="qs-foot">
     <button class="qs-act" onclick="qsShare(this)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V3M8 3L5.5 5.5M8 3l2.5 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 9v3a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Share this page</button>
     <button class="qs-act" onclick="qsPasswords()"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="7" width="9" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" stroke="currentColor" stroke-width="1.3"/></svg>Passwords</button>
+    <button class="qs-act" onclick="qsThemes()"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.4c-3.1 0-5.6 2.3-5.6 5.2 0 2.4 1.9 3.9 3.9 3.9.85 0 1.25-.55 1.25-1.15 0-.65-.45-.9-.45-1.45 0-.5.4-.85.95-.85h1.15c1.95 0 3.5-1.35 3.5-3.45C13.6 4.1 11.1 2.4 8 2.4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="5.4" cy="7" r=".75" fill="currentColor"/><circle cx="8" cy="5.4" r=".75" fill="currentColor"/><circle cx="10.4" cy="6.7" r=".75" fill="currentColor"/></svg>Themes</button>
     <button class="qs-act" onclick="qsBlockElement()"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M4.1 4.1l7.8 7.8" stroke="currentColor" stroke-width="1.3"/></svg>Block an element</button>
     <button class="qs-act" onclick="qsClearData(this)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 4.5h9M6 4.5v-1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M4.5 4.5l.5 8.5a1 1 0 0 0 1 .9h4a1 1 0 0 0 1-.9l.5-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Clear browsing data</button>
     <button class="qs-more" onclick="openFullSettings()">More settings →</button>
@@ -703,6 +704,7 @@ async function hydrateFavicons(root){
 async function init(){
   settings=await pace.getSettings();
   applyAll();
+  try{ const at=await pace.themesActive(); if(at) applyThemeTokens(at); }catch(e){}
   pinnedApps=[...(settings.sidebarApps||['spotify','youtube-music','discord'])];
   bookmarks=await pace.getBookmarks()||[];
   renderSbChips();
@@ -719,13 +721,14 @@ async function init(){
   pace.on('window-state',({maximized})=>setMaxIcon(maximized));
   pace.on('relayout',()=>pushLayout());
   pace.on('settings-panel-closed',()=>{ if(settingsPanelOpen){ settingsPanelOpen=false; document.getElementById('settings-catch').classList.remove('on'); pushLayout(); } });
-  pace.on('settings-changed',s=>{ settings={...settings,...s}; applyAll(); applyToolbarButtons(); applyBookmarksBar(); renderPinnedExt(); });
+  pace.on('settings-changed',s=>{ settings={...settings,...s}; applyAll(); if(activeThemeTokens)applyThemeTokens(activeThemeTokens); applyToolbarButtons(); applyBookmarksBar(); renderPinnedExt(); });
   pace.on('bookmark-action',({action,index})=>handleBookmarkAction(action,index));
   pace.on('bm-bar-action',p=>handleBmBarAction(p));
   pace.on('ask-default-browser',()=>showDefaultCard());
   pace.on('media-update',m=>renderMedia(m));
   pace.on('app-shortcut',({action})=>handleAppShortcut(action));
   pace.on('sidebar-app-closed',()=>{ activeSbApp=null; renderSbChips(); pushLayout(); });
+  pace.on('theme-changed',t=>applyThemeTokens(t));
   pace.on('download-started',dl=>{ downloadsList.unshift(dl); renderDownloads(); if(!dlOpen) toggleDownloads(); toast('⬇ '+dl.filename); });
   pace.on('download-progress',({id,received,total})=>{ const dl=downloadsList.find(d=>d.id===id); if(dl){dl.received=received;dl.total=total;} const el=document.getElementById('dl-'+id); if(el&&total){const b=el.querySelector('.dl-bar'); if(b)b.style.width=Math.round(received/total*100)+'%';} });
   pace.on('download-done',({id,state,savePath})=>{ const dl=downloadsList.find(d=>d.id===id); if(dl){dl.state=state;dl.savePath=savePath;} renderDownloads(); if(state==='completed') toast('✅ Download complete','ok'); });
@@ -740,6 +743,19 @@ async function init(){
 }
 
 function applyAll(){ applyTheme(); applyAccent(); applyGlass(); applyFont(); }
+// ── Pace Themes: map a .pacetheme's `design` onto the chrome's CSS variables ──
+const THEME_VAR_MAP={accent:'--acc',accent2:'--acc2',bg0:'--bg0',bg1:'--bg1',glass:'--glass',glass2:'--glass-2',glassHi:'--glass-hi',glassLine:'--glass-line',hover:'--hover',active:'--active',text1:'--t1',text2:'--t2',text3:'--t3',glassBlur:'--glass-blur',glassSat:'--glass-sat',radius:'--r-md',radiusLg:'--r-lg',font:'--font'};
+let activeThemeTokens=null;
+function applyThemeTokens(t){
+  // The built-in "pace-default" means "no theme" — fall back to the user's own appearance settings.
+  activeThemeTokens=(t&&t.id&&t.id!=='pace-default'&&t.design)?t:null;
+  const r=document.documentElement.style;
+  if(!activeThemeTokens){ for(const k in THEME_VAR_MAP) r.removeProperty(THEME_VAR_MAP[k]); r.removeProperty('--acc-soft'); r.removeProperty('--acc-glow'); applyAll(); return; }
+  const d=activeThemeTokens.design;
+  for(const k in THEME_VAR_MAP){ if(d[k]) r.setProperty(THEME_VAR_MAP[k],d[k]); }
+  if(d.accent&&/^#/.test(d.accent)){ r.setProperty('--acc-soft',hexA(d.accent,.16)); r.setProperty('--acc-glow',hexA(d.accent,.30)); }
+  document.body.classList.toggle('light',activeThemeTokens.mode==='light');
+}
 const ICON_PLAY='<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><path d="M4 2.5l7 4.5-7 4.5z"/></svg>';
 const ICON_PAUSE='<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><rect x="3.6" y="3" width="2.5" height="8" rx="1"/><rect x="7.9" y="3" width="2.5" height="8" rx="1"/></svg>';
 function renderMedia(m){
@@ -1280,6 +1296,7 @@ function qsToggleBookmarks(el){ toggleBookmarksBarSetting(); el.classList.toggle
 function qsGlass(g){ settings.glassStrength=g; applyGlass(); pace.saveSettings(settings); syncQuickSettings(); }
 function openFullSettings(){ closeQuickSettings(); pace.navigate('pace://settings'); }
 function qsPasswords(){ closeQuickSettings(); pace.navigate('pace://passwords'); }
+function qsThemes(){ closeQuickSettings(); pace.navigate('pace://themes'); }
 function qsShare(btn){
   const url=currentUrl||(tabs[activeTabId]&&tabs[activeTabId].url)||'';
   if(!url||url==='pace://newtab'){ if(btn){const o=btn.innerHTML;btn.innerHTML='Nothing to share';setTimeout(()=>btn.innerHTML=o,1300);} return; }

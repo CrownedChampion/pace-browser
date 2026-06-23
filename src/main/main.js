@@ -84,6 +84,8 @@ const userDataPath   = app.getPath('userData');
 // Pace Addon runtime (Phase 1) — loads native Pace Addons from <userData>/PaceAddons.
 const addons = require('./addons');
 try { addons.init({ userDataPath, appPath: app.getAppPath() }); } catch (e) {}
+const themes = require('./themes');
+try { themes.init(userDataPath); } catch (e) {}
 const settingsPath   = path.join(userDataPath, 'settings.json');
 const historyPath    = path.join(userDataPath, 'history.json');
 const bookmarksPath  = path.join(userDataPath, 'bookmarks.json');
@@ -731,7 +733,7 @@ function createTab(tabUrl = 'pace://newtab', background = false) {
 }
 
 function navigateView(view, tabUrl) {
-  const map = { 'pace://newtab': 'newtab.html', 'pace://settings': 'settings.html', 'pace://downloads': 'downloads.html', 'pace://extensions': 'extensions.html', 'pace://history': 'history.html', 'pace://tos': 'tos.html', 'pace://privacy': 'privacy.html', 'pace://passwords': 'passwords.html' };
+  const map = { 'pace://newtab': 'newtab.html', 'pace://settings': 'settings.html', 'pace://downloads': 'downloads.html', 'pace://extensions': 'extensions.html', 'pace://history': 'history.html', 'pace://tos': 'tos.html', 'pace://privacy': 'privacy.html', 'pace://passwords': 'passwords.html', 'pace://themes': 'themes.html' };
   const base = (tabUrl || '').split('?')[0];
   // If an extension overrides the new-tab page and the user enabled that, load the extension's page.
   if (base === 'pace://newtab' && newtabOverrideUrl) {
@@ -759,7 +761,7 @@ function refreshNewtabOverride() {
 function formatUrl(u) {
   if (!u) return '';
   if (u.startsWith('file://')) {
-    const m = ['newtab', 'settings', 'downloads', 'extensions', 'history', 'tos', 'privacy', 'passwords'];
+    const m = ['newtab', 'settings', 'downloads', 'extensions', 'history', 'tos', 'privacy', 'passwords', 'themes'];
     for (const p of m) if (u.includes(p + '.html')) return 'pace://' + p;
     return u;
   }
@@ -1160,6 +1162,13 @@ ipcMain.on('quit-and-install', () => {
 });
 
 ipcMain.handle('get-history', () => readHistory());
+// ── Pace Themes (dedicated .pacetheme system) ──
+ipcMain.handle('themes-list', () => { try { return themes.list(); } catch (e) { return []; } });
+ipcMain.handle('themes-active', () => { try { return themes.active(); } catch (e) { return null; } });
+ipcMain.handle('themes-apply', (e, id) => { let r; try { r = themes.apply(String(id || '')); } catch (err) { r = { ok: false, error: 'Failed to apply theme.' }; } if (r && r.ok) sendToAll('theme-changed', r.active); return r; });
+ipcMain.handle('themes-reset', () => { let r; try { r = themes.reset(); } catch (err) { r = { ok: false }; } if (r && r.ok) sendToAll('theme-changed', r.active); return r; });
+ipcMain.handle('themes-install', (e, doc) => { try { return themes.install(doc); } catch (err) { return { ok: false, error: 'Failed to install theme.' }; } });
+ipcMain.handle('themes-remove', (e, id) => { let r; try { r = themes.remove(String(id || '')); } catch (err) { r = { ok: false, error: 'Failed to remove theme.' }; } if (r && r.ok) sendToAll('theme-changed', r.active); return r; });
 ipcMain.on('clear-history', () => { try { fs.writeFileSync(historyPath, '[]'); } catch (e) {} });
 ipcMain.on('remove-history-item', (e, { url, time }) => {
   try { let h = readHistory().filter(x => !(x.url === url && x.time === time)); fs.writeFileSync(historyPath, JSON.stringify(h)); } catch (e) {}

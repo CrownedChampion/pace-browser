@@ -168,6 +168,12 @@ if (isInternalPacePage()) {
     getDefaultBrowserStatus: () => ipcRenderer.invoke('default-browser-status'),
     setDefaultBrowser: () => ipcRenderer.invoke('set-default-browser'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    themesList:    () => ipcRenderer.invoke('themes-list'),
+    themesActive:  () => ipcRenderer.invoke('themes-active'),
+    themesApply:   (id) => ipcRenderer.invoke('themes-apply', id),
+    themesReset:   () => ipcRenderer.invoke('themes-reset'),
+    themesInstall: (doc) => ipcRenderer.invoke('themes-install', doc),
+    themesRemove:  (id) => ipcRenderer.invoke('themes-remove', id),
     quitAndInstall: () => ipcRenderer.send('quit-and-install'),
     importBookmarks: (source) => ipcRenderer.invoke('import-bookmarks', { source }),
 
