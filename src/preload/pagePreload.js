@@ -128,6 +128,14 @@ if (isInternalPacePage()) {
     duplicateTab: (tabId) => ipcRenderer.send('duplicate-tab', { tabId }),
     showTabMenu:  (tabId) => ipcRenderer.send('show-tab-menu', { tabId }),
 
+    // Addons (Pace Addon manager — pace://extensions)
+    getAddons:           () => ipcRenderer.invoke('get-addons'),
+    setAddonEnabled:     (id, enabled) => ipcRenderer.invoke('set-addon-enabled', { id, enabled }),
+    removeAddon:         (id) => ipcRenderer.invoke('remove-addon', { id }),
+    installAddonFolder:  () => ipcRenderer.invoke('install-addon-folder'),
+    installAddonFile:    () => ipcRenderer.invoke('install-addon-file'),
+    openExtension:       (id) => ipcRenderer.invoke('open-extension-popup', { id }),
+
     // Settings
     getSettings:  () => ipcRenderer.invoke('get-settings'),
     saveSettings: (s) => ipcRenderer.send('save-settings', s),

@@ -276,6 +276,10 @@ select.bme-inp option{color:#111;background:#fff}
 .dl-btn{font-size:11px;font-weight:600;padding:6px 14px;border-radius:99px;background:var(--hover);border:none;color:var(--t1);cursor:pointer;font-family:var(--font);transition:background .15s}
 .dl-btn:hover{background:var(--active)}
 .empty{padding:36px 24px;text-align:center;font-size:12.5px;color:var(--t3)}
+.dl-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px}
+.dl-top .dl-name{margin-bottom:0;flex:1;min-width:0}
+.dl-icon{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:transparent;border:none;color:var(--t3);cursor:pointer;transition:background .15s,color .15s;padding:0}
+.dl-icon:hover{background:var(--hover);color:#ff6b6b}
 .dl-name{font-size:12.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:9px;letter-spacing:-.003em}
 .dl-bar-bg{height:5px;background:var(--hover);border-radius:99px;overflow:hidden;margin-bottom:8px}
 .dl-bar{height:100%;background:var(--acc);border-radius:99px;transition:width .3s}
@@ -714,6 +718,7 @@ async function init(){
   renderPinnedExt();
   document.getElementById('bookmarks-bar').addEventListener('contextmenu',ev=>{ if(ev.target.closest('.bm-item'))return; ev.preventDefault(); pace.showBookmarksBarMenu(); });
   bindAddr(); bindTabEvents(); bindKeys();
+  try{ pace.requestTabs && pace.requestTabs(); }catch(e){}   // pull current tabs now the snapshot handler is live
   downloadsList=await pace.getDownloads()||[];
   renderDownloads();
   const maxed=await pace.isMaximized(); setMaxIcon(maxed);
@@ -775,7 +780,7 @@ function handleAppShortcut(action){
   else if(action==='history') pace.newTab('pace://history');
   else if(action==='downloads') toggleDownloads();
   else if(action==='bookmark') toggleBookmarkCurrent();
-  else if(action==='next-tab'||action==='prev-tab'){ const ids=Object.keys(tabs).map(Number); if(ids.length<2)return; let i=ids.indexOf(activeTabId); i=(action==='next-tab')?(i+1)%ids.length:(i-1+ids.length)%ids.length; const nid=ids[i]; saveAddrDraft(); activeTabId=nid; renderTabs(); restoreAddrFor(nid, tabs[nid]&&tabs[nid].url); pace.switchTab(nid); }
+  else if(action==='next-tab'||action==='prev-tab'){ const ids=Object.keys(tabs).map(Number); if(ids.length<2)return; let i=ids.indexOf(activeTabId); i=(action==='next-tab')?(i+1)%ids.length:(i-1+ids.length)%ids.length; const nid=ids[i]; saveAddrDraft(); pace.switchTab(nid); }
 }
 function applyTheme(){ document.body.classList.toggle('light',settings.theme==='light'); document.body.classList.toggle('no-anim',settings.animations===false); }
 function applyAccent(){
@@ -972,18 +977,29 @@ function handleBookmarkAction(action,index){
 }
 
 function bindTabEvents(){
-  pace.on('tab-created',({tabId,url,active})=>{ if(active)saveAddrDraft(); tabs[tabId]={tabId,url:url||'pace://newtab',title:'New Tab',loading:false}; if(active)activeTabId=tabId; renderTabs(); if(active){setAddrBar(url,true);pushLayout();} });
-  pace.on('tab-closed',({tabId,activeId})=>{
-    delete tabs[tabId];
-    // Main is the single source of truth for the active tab. Adopt exactly what it sends — never guess.
-    if(activeId!=null) activeTabId=activeId;
-    else if(!tabs[activeTabId]) activeTabId=null;   // last tab closed; main is creating a fresh one
+  pace.on('tabs-state', snap=>{
+    if(!snap) return;
+    const prevActive = activeTabId;
+    const activeChanged = (snap.active !== prevActive);
+    if(activeChanged) saveAddrDraft();   // stash the address draft for the tab we're leaving
+    // Rebuild the local tab map from the authoritative snapshot, preserving renderer-only fields (drafts).
+    const map={};
+    (snap.tabs||[]).forEach(t=>{ const old=tabs[t.id]||{}; map[t.id]={ ...old, tabId:t.id, url:t.url, title:t.title||t.url, loading:!!t.loading, favicon:t.favicon||'', canGoBack:!!t.canGoBack, canGoForward:!!t.canGoForward }; });
+    tabs=map;
+    activeTabId=snap.active;
     renderTabs();
-    // The address bar + page layout for the new active tab arrive via the tab-switched that follows.
+    const at=tabs[activeTabId];
+    if(!at) return;
+    if(activeChanged){
+      restoreAddrFor(activeTabId, at.url);
+      pushLayout();
+    } else {
+      setAddrBar(at.url);   // no-op while the address bar is focused (setAddrBar guards on focus)
+    }
+    setNavBtns(at.canGoBack, at.canGoForward);
+    setLoading(at.loading);
+    currentUrl = at.url||''; currentTitle = at.title||''; updateStar();
   });
-  pace.on('tab-switched',({tabId,url,title,canGoBack,canGoForward})=>{ saveAddrDraft(); activeTabId=tabId; if(tabs[tabId]&&title)tabs[tabId].title=title; renderTabs(); restoreAddrFor(tabId,url); setNavBtns(canGoBack,canGoForward); currentUrl=url||''; currentTitle=title||(tabs[tabId]&&tabs[tabId].title)||''; updateStar(); pushLayout(); });
-  pace.on('tab-update',d=>{ if(!tabs[d.tabId])return; Object.assign(tabs[d.tabId],d); renderTabs(); if(d.tabId===activeTabId){ if(d.url!==undefined){setAddrBar(d.url);currentUrl=d.url;} if(d.title!==undefined)currentTitle=d.title; if(d.canGoBack!==undefined)setNavBtns(d.canGoBack,d.canGoForward); updateStar();} });
-  pace.on('tab-loading',({tabId,loading})=>{ if(!tabs[tabId])return; tabs[tabId].loading=loading; renderTabs(); if(tabId===activeTabId)setLoading(loading); });
   const scroll=document.getElementById('tab-scroll');
   scroll.addEventListener('wheel',e=>{ if(e.deltaY)scroll.scrollLeft+=e.deltaY; },{passive:true});
   // Auto-scroll when the cursor rests near either edge of the tab strip
@@ -1011,7 +1027,7 @@ function renderTabs(){
     el.dataset.id=t.tabId;
     el.innerHTML='<span class="tab-fav">'+favHtmlFor(t)+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>';
     el._favSig=favHtmlFor(t);
-    el.addEventListener('click',e=>{ if(e.target.closest('[data-close]'))return; const id=+el.dataset.id; if(id===activeTabId)return; saveAddrDraft(); activeTabId=id; renderTabs(); restoreAddrFor(id, tabs[id]&&tabs[id].url); pace.switchTab(id); });
+    el.addEventListener('click',e=>{ if(e.target.closest('[data-close]'))return; const id=+el.dataset.id; if(id===activeTabId)return; saveAddrDraft(); pace.switchTab(id); });
     el.addEventListener('contextmenu',e=>{ e.preventDefault(); pace.showTabMenu(+el.dataset.id); });
     el.addEventListener('auxclick',e=>{ if(e.button===1){e.preventDefault();pace.closeTab(+el.dataset.id);} });
     const x=el.querySelector('[data-close]'); if(x)x.addEventListener('click',e=>{e.stopPropagation();pace.closeTab(+x.dataset.close);});
@@ -1242,9 +1258,30 @@ function renderDownloads(){
   const list=document.getElementById('dl-list');
   if(!downloadsList.length){ list.innerHTML='<div class="empty">No downloads yet</div>'; return; }
   const fmt=b=>{ if(!b)return '?'; if(b<1024)return b+' B'; if(b<1048576)return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB'; };
+  const trashSvg='<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 3.5h9M5 3.5V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M4 3.5l.5 8a1 1 0 0 0 1 .9h3a1 1 0 0 0 1-.9l.5-8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // Paths are stored on data-* attributes (HTML attributes keep backslashes literal, unlike an inline
+  // onclick string where a Windows path like C:\Users\… is mangled by JS escape sequences). Buttons are
+  // then wired with real listeners that read the raw path back via getAttribute.
   list.innerHTML=downloadsList.map(dl=>{ const done=dl.state==='completed',fail=dl.state==='interrupted'||dl.state==='cancelled'; const pct=dl.total?Math.min(100,Math.round(dl.received/dl.total*100)):0;
-    return '<div class="dl-item" id="dl-'+dl.id+'"><div class="dl-name">'+esc(dl.filename)+'</div><div class="dl-bar-bg"><div class="dl-bar" style="width:'+(done?100:pct)+'%"></div></div><div class="dl-meta"><span>'+(done?'Done':fail?'Failed':pct+'%')+'</span><span>'+fmt(dl.received)+(dl.total?' / '+fmt(dl.total):'')+'</span></div>'+(done?'<div class="dl-acts"><button class="dl-btn" onclick="pace.openFile(\''+esc(dl.savePath)+'\')">Open</button><button class="dl-btn" onclick="pace.showInFolder(\''+esc(dl.savePath)+'\')">Show</button></div>':'')+'</div>'; }).join('');
+    const acts=done?'<button class="dl-btn" data-act="open">Open</button><button class="dl-btn" data-act="show">Show</button>':'';
+    return '<div class="dl-item" id="dl-'+dl.id+'" data-id="'+esc(String(dl.id))+'" data-path="'+esc(dl.savePath||'')+'">'
+      +'<div class="dl-top"><div class="dl-name">'+esc(dl.filename)+'</div>'
+      +'<button class="dl-icon" data-act="trash" title="Remove from list">'+trashSvg+'</button></div>'
+      +'<div class="dl-bar-bg"><div class="dl-bar" style="width:'+(done?100:pct)+'%"></div></div>'
+      +'<div class="dl-meta"><span>'+(done?'Done':fail?'Failed':pct+'%')+'</span><span>'+fmt(dl.received)+(dl.total?' / '+fmt(dl.total):'')+'</span></div>'
+      +(acts?'<div class="dl-acts">'+acts+'</div>':'')
+      +'</div>'; }).join('');
+  list.querySelectorAll('.dl-item').forEach(item=>{
+    const path=item.getAttribute('data-path')||''; const id=item.getAttribute('data-id');
+    item.querySelectorAll('[data-act]').forEach(btn=>btn.addEventListener('click',e=>{
+      e.stopPropagation(); const act=btn.dataset.act;
+      if(act==='open'){ if(path) pace.openFile(path); }
+      else if(act==='show'){ if(path) pace.showInFolder(path); }
+      else if(act==='trash'){ removeDownload(id); }
+    }));
+  });
 }
+function removeDownload(id){ downloadsList=downloadsList.filter(d=>String(d.id)!==String(id)); try{ pace.removeDownload&&pace.removeDownload(id); }catch(e){} renderDownloads(); }
 
 function buildQuickSettings(){
   const sw=document.getElementById('qs-swatches');

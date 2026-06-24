@@ -247,7 +247,8 @@ function saveDownloads() { try { fs.writeFileSync(downloadsPath, JSON.stringify(
 // ─── State ───────────────────────────────────────────────────────────────────
 let mainWindow   = null;
 let tabs         = {};      // tabId -> BrowserView
-let tabMeta      = {};      // tabId -> { detached }
+let tabMeta      = {};      // tabId -> { favicon }
+let tabOrder     = [];      // [tabId, ...] in left-to-right display order (the single source of order)
 let preloadViews = {};      // normalizedUrl -> { view, time }
 let sidebarView  = null;
 let settingsView = null;
@@ -608,7 +609,7 @@ function attachTabListeners(view, tabId) {
       } catch (e) {}
     }
   });
-  wc.on('did-start-loading', () => mainWindow.webContents.send('tab-loading', { tabId, loading: true }));
+  wc.on('did-start-loading', () => sendTabs());
   // Auto-close tabs that dead-end on a genuinely blank page (e.g. a popup or redirect that goes
   // nowhere). Re-checked after a short delay so a tab that is mid-navigation (about:blank -> real
   // URL) is never closed, the new-tab page (pace://newtab) is never touched, and one tab always stays.
@@ -628,21 +629,19 @@ function attachTabListeners(view, tabId) {
   });
   wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => {
     if (isMainFrame && formatUrl(url || wc.getURL()).startsWith('pace://')) {
-      mainWindow.webContents.send('tab-update', { tabId, favicon: '' });
+      if (tabMeta[tabId]) tabMeta[tabId].favicon = '';
     }
+    if (isMainFrame) sendTabs();
   });
   wc.on('did-stop-loading', () => {
     const u = wc.getURL(); const t = wc.getTitle() || u;
-    mainWindow.webContents.send('tab-loading', { tabId, loading: false });
-    mainWindow.webContents.send('tab-update', { tabId, url: formatUrl(u), title: t, canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
+    sendTabs();
     addToHistory(u, t);
   });
-  wc.on('page-title-updated', (e, title) => mainWindow.webContents.send('tab-update', { tabId, title }));
-  wc.on('page-favicon-updated', (e, favs) => { if (favs && favs[0]) mainWindow.webContents.send('tab-update', { tabId, favicon: favs[0] }); });
-  const navUpdate = (url) => mainWindow.webContents.send('tab-update', { tabId, url: formatUrl(url), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
-  wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => { if (isMainFrame && url) mainWindow.webContents.send('tab-update', { tabId, url: formatUrl(url) }); });
-  wc.on('did-navigate', (e, url) => navUpdate(url));
-  wc.on('did-navigate-in-page', (e, url) => navUpdate(url));
+  wc.on('page-title-updated', () => sendTabs());
+  wc.on('page-favicon-updated', (e, favs) => { if (favs && favs[0] && tabMeta[tabId]) tabMeta[tabId].favicon = favs[0]; sendTabs(); });
+  wc.on('did-navigate', () => sendTabs());
+  wc.on('did-navigate-in-page', () => sendTabs());
   wc.setWindowOpenHandler(({ url, disposition }) => {
     // Open popups, target=_blank links, and extension-created tabs (chrome-extension://) as real tabs.
     // Foreground when the page asked for a new foreground tab; background for new-window/background.
@@ -718,18 +717,17 @@ function makeTabView() {
 function createTab(tabUrl = 'pace://newtab', background = false) {
   const tabId = ++tabCounter;
   const view = makeTabView();
-  tabs[tabId] = view; tabMeta[tabId] = { detached: false };
+  tabs[tabId] = view; tabMeta[tabId] = { favicon: '' };
+  tabOrder.push(tabId);
   attachTabListeners(view, tabId);
-
+  navigateView(view, tabUrl);
+  try { if (chromeExtensions) chromeExtensions.addTab(view.webContents, mainWindow); } catch (e) {}
   if (!background) {
     activeTabId = tabId;
-    showActiveTab();        // brings the new view on-screen and parks the others
-  } else {
-    parkView(view);         // attached but off-screen — painting in the background, instant to switch to
+    applyView();
+    try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(view.webContents); } catch (e) {}
   }
-  navigateView(view, tabUrl);
-  mainWindow.webContents.send('tab-created', { tabId, url: formatUrl(tabUrl), active: !background });
-  try { if (chromeExtensions) chromeExtensions.addTab(view.webContents, mainWindow); } catch (e) {}
+  sendTabs();
   return tabId;
 }
 
@@ -776,111 +774,102 @@ function formatUrl(u) {
 // on/off screen — it is instant, smooth, and can never show a blank page (the old detach→re-attach path
 // left re-attached views blank until a resize). `pageHidden` is set when a floating menu wants the page
 // hidden behind the frozen snapshot; then even the active view is parked off-screen.
+// ── Tab presentation — standard single-active-view model ──────────────────────
+// Exactly ONE tab view is attached to the window at a time: the active one, sized to the page area.
+// Switching detaches the old and attaches the new — the way every normal browser works. `applyView()`
+// is the SINGLE authority over what is attached and where; everything (switch, close, create, resize,
+// menu open/close) routes through it, so the page and the tab strip can never disagree. `pageHidden`
+// is true while a floating menu shows a frozen snapshot, during which no page view is attached.
 let pageHidden = false;
-function onscreenBounds() {
+let lastPageBounds = null;
+function contentBounds() {
   if (lastPageBounds) return lastPageBounds;
-  try { const cb = mainWindow.getContentBounds(); return { x: 0, y: CHROME_H, width: cb.width, height: Math.max(120, cb.height - CHROME_H) }; }
+  try { const cb = mainWindow.getContentBounds(); return { x: 0, y: CHROME_H, width: cb.width, height: Math.max(100, cb.height - CHROME_H) }; }
   catch (e) { return { x: 0, y: CHROME_H, width: 1200, height: 600 }; }
 }
-function offscreenBounds() { const b = onscreenBounds(); return { x: -40000, y: b.y, width: b.width, height: b.height }; }
-function parkView(view) {
-  if (!view) return;
-  try { mainWindow.addBrowserView(view); } catch (e) {}
-  try { view.setBounds(offscreenBounds()); } catch (e) {}
-}
-function showActiveTab() {
+function applyView() {
   if (!mainWindow) return;
-  const ids = Object.keys(tabs).map(Number);
-  if (!ids.length) return;
-  if (!activeTabId || !tabs[activeTabId]) activeTabId = ids[ids.length - 1];
-  // Park every non-active tab off-screen (kept attached so it stays painted and switches in instantly).
-  for (const id of ids) {
-    if (id === activeTabId) continue;
-    const v = tabs[id]; if (!v) continue;
-    parkView(v);
-    if (tabMeta[id]) tabMeta[id].detached = false;
-  }
-  // Place the active tab: on-screen normally, or parked if a menu is currently covering the page.
+  for (const id of tabOrder) { const v = tabs[id]; if (v && id !== activeTabId) { try { mainWindow.removeBrowserView(v); } catch (e) {} } }
   const view = tabs[activeTabId];
+  if (!view) return;
+  if (pageHidden) { try { mainWindow.removeBrowserView(view); } catch (e) {} return; }
+  const b = contentBounds();
   try { mainWindow.addBrowserView(view); } catch (e) {}
-  if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
-  try { view.setBounds(pageHidden ? offscreenBounds() : onscreenBounds()); } catch (e) {}
+  try { view.setBounds(b); } catch (e) {}
+  try { view.webContents.invalidate(); } catch (e) {}
+  // Guarantee a frame: a just-attached BrowserView can stay blank until its bounds actually change.
+  const target = view;
+  setTimeout(() => {
+    try {
+      if (tabs[activeTabId] !== target || pageHidden) return;
+      const c = contentBounds();
+      target.setBounds({ x: c.x, y: c.y, width: c.width, height: Math.max(1, c.height - 1) });
+      target.setBounds(c);
+      target.webContents.invalidate();
+    } catch (e) {}
+  }, 8);
 }
-function switchTab(tabId) {
+
+// Authoritative tab-strip snapshot — the renderer draws this declaratively (no optimistic state).
+function tabSnapshot() {
+  return {
+    order: tabOrder.slice(),
+    active: activeTabId,
+    tabs: tabOrder.map(id => {
+      const wc = tabs[id] && tabs[id].webContents;
+      let url = '', title = '', loading = false, cgb = false, cgf = false;
+      try { url = formatUrl(wc.getURL()); title = wc.getTitle() || url; loading = wc.isLoading(); cgb = wc.canGoBack(); cgf = wc.canGoForward(); } catch (e) {}
+      return { id, url, title, loading, favicon: (tabMeta[id] && tabMeta[id].favicon) || '', canGoBack: cgb, canGoForward: cgf };
+    })
+  };
+}
+function sendTabs() { try { if (mainWindow) mainWindow.webContents.send('tabs-state', tabSnapshot()); } catch (e) {} }
+
+function setActiveTab(tabId) {
   if (!tabs[tabId]) return;
   activeTabId = tabId;
-  if (tabMeta[tabId]) tabMeta[tabId].detached = false;
-  showActiveTab();
-  const wc = tabs[tabId].webContents;
-  try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(wc); } catch (e) {}
-  mainWindow.webContents.send('tab-switched', { tabId, url: formatUrl(wc.getURL()), title: wc.getTitle(), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
+  applyView();
+  try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(tabs[tabId].webContents); } catch (e) {}
+  sendTabs();
 }
+function switchTab(tabId) { setActiveTab(tabId); }   // back-compat alias
 
 function closeTab(tabId) {
   if (!tabs[tabId]) return;
   const wasActive = activeTabId === tabId;
-  const order = Object.keys(tabs).map(Number);   // numeric id order == left-to-right tab order
-  const idx = order.indexOf(tabId);
-  // Remember the closed tab's URL so it can be reopened (skip blank/new tabs)
-  try {
-    const u = formatUrl(tabs[tabId].webContents.getURL());
-    if (u && u !== 'pace://newtab') { closedTabs.push(u); if (closedTabs.length > 25) closedTabs.shift(); }
-  } catch (e) {}
+  const idx = tabOrder.indexOf(tabId);
+  try { const u = formatUrl(tabs[tabId].webContents.getURL()); if (u && u !== 'pace://newtab') { closedTabs.push(u); if (closedTabs.length > 25) closedTabs.shift(); } } catch (e) {}
   const closingView = tabs[tabId];
-  if (tabMeta[tabId] && !tabMeta[tabId].detached) { try { mainWindow.removeBrowserView(closingView); } catch (e) {} }
+  try { mainWindow.removeBrowserView(closingView); } catch (e) {}
   delete tabs[tabId]; delete tabMeta[tabId];
-  // Decide the next active tab HERE (single source of truth): the tab to the RIGHT of the closed one,
-  // or the new right-most if it was last — exactly how a normal browser behaves. Removing index `idx`
-  // shifts the former right neighbour into position `idx`.
-  let target = null;
+  if (idx >= 0) tabOrder.splice(idx, 1);
+  // Next active tab when the active one closed: the tab to the RIGHT, else the new right-most (standard).
   if (wasActive) {
-    const rest = Object.keys(tabs).map(Number);
-    if (rest.length) target = (idx < rest.length) ? rest[idx] : rest[rest.length - 1];
+    if (tabOrder.length) {
+      activeTabId = tabOrder[Math.min(idx, tabOrder.length - 1)];
+      applyView();
+      try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(tabs[activeTabId].webContents); } catch (e) {}
+    } else {
+      activeTabId = null;
+      createTab('pace://newtab');                                       // createTab sends the snapshot
+      setTimeout(() => { try { closingView.webContents.destroy(); } catch (e) {} }, 0);
+      return;
+    }
   }
-  // Tell the renderer which tab is closing AND which one is now active — it adopts this, it does not guess.
-  mainWindow.webContents.send('tab-closed', { tabId, activeId: wasActive ? target : activeTabId });
-  if (wasActive) {
-    if (target != null) switchTab(target);                 // switchTab → showActiveTab attaches + repaints
-    else { activeTabId = null; createTab('pace://newtab'); } // closed the last tab
-  }
-  // Destroy the closed page on the next tick, after the neighbour view has been shown.
   setTimeout(() => { try { closingView.webContents.destroy(); } catch (e) {} }, 0);
-  ensureTab();
+  sendTabs();
 }
 
-function ensureTab() {
-  if (Object.keys(tabs).length === 0) { activeTabId = null; createTab('pace://newtab'); }
-}
-
-function reopenClosedTab() {
-  const url = closedTabs.pop();
-  createTab(url || 'pace://newtab');
-}
-
-function duplicateTab(tabId) {
-  if (!tabs[tabId]) return;
-  createTab(formatUrl(tabs[tabId].webContents.getURL()) || 'pace://newtab', true);
-}
+function ensureTab() { if (tabOrder.length === 0) { activeTabId = null; createTab('pace://newtab'); } }
+function reopenClosedTab() { const url = closedTabs.pop(); createTab(url || 'pace://newtab'); }
+function duplicateTab(tabId) { if (tabs[tabId]) createTab(formatUrl(tabs[tabId].webContents.getURL()) || 'pace://newtab', false); }
 
 // ─── Layout (renderer-driven) ───────────────────────────────────────────────────
-let lastPageBounds = null;   // remembered on-screen page bounds, reused so a parked view returns to the right place
 function setPageBounds(bounds) {
-  if (!activeTabId || !tabs[activeTabId]) return;
-  const view = tabs[activeTabId];
-  if (bounds === null) {
-    // A floating menu wants the page hidden behind the frozen snapshot: keep the view ATTACHED but park
-    // it off-screen. (Never removeBrowserView here — re-attaching later was the source of blank pages.)
-    pageHidden = true;
-    parkView(view);
-    if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
-    return;
-  }
+  if (bounds === null) { pageHidden = true; applyView(); return; }   // a floating menu wants the page hidden
   pageHidden = false;
-  const b = { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.max(120, Math.round(bounds.width)), height: Math.max(120, Math.round(bounds.height)) };
-  lastPageBounds = b;
-  try { mainWindow.addBrowserView(view); } catch (e) {}
-  if (tabMeta[activeTabId]) tabMeta[activeTabId].detached = false;
-  try { view.setBounds(b); } catch (e) {}
+  lastPageBounds = { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.max(100, Math.round(bounds.width)), height: Math.max(100, Math.round(bounds.height)) };
+  applyView();
 }
 
 function setSidebarView(payload) {
@@ -990,14 +979,10 @@ function navigateTab(tabId, rawUrl) {
     try { mainWindow.removeBrowserView(tabs[tid]); } catch (e) {}
     try { tabs[tid].webContents.destroy(); } catch (e) {}
     tabs[tid] = pv;
-    if (!tabMeta[tid]) tabMeta[tid] = { detached: false };
+    if (!tabMeta[tid]) tabMeta[tid] = { favicon: '' };
     attachTabListeners(pv, tid);
-    if (wasActive) showActiveTab();   // place the warmed-up view on-screen and park the rest
-    else parkView(pv);                // keep it attached but parked off-screen, painted and ready
-    const wc = pv.webContents;
-    mainWindow.webContents.send('tab-update', { tabId: tid, url: formatUrl(wc.getURL() || normalized), title: wc.getTitle(), loading: wc.isLoading(), canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() });
-    // ask renderer to re-apply bounds for the new view
-    mainWindow.webContents.send('relayout');
+    if (wasActive) applyView();   // attach the warmed-up view (it is the active tab)
+    sendTabs();
   } else {
     navigateView(tabs[tid], normalized);
   }
@@ -1082,6 +1067,7 @@ ipcMain.on('chrome-ready', () => {
 ipcMain.on('new-tab-bg', (e, { url } = {}) => createTab(url || 'pace://newtab', true));
 ipcMain.on('switch-tab', (e, { tabId }) => switchTab(tabId));
 ipcMain.on('close-tab', (e, { tabId }) => closeTab(tabId));
+ipcMain.on('request-tabs', () => sendTabs());
 ipcMain.on('duplicate-tab', (e, { tabId }) => duplicateTab(tabId));
 ipcMain.on('navigate', (e, { tabId, url }) => navigateTab(tabId, url));
 ipcMain.on('preload-url', (e, { url, force }) => { if (url) preloadUrl(url, force); });
@@ -1271,6 +1257,7 @@ ipcMain.on('show-bookmarks-bar-menu', (e) => {
 
 ipcMain.handle('get-downloads', () => downloads);
 ipcMain.on('clear-downloads', () => { downloads = []; saveDownloads(); });
+ipcMain.on('remove-download', (e, { id } = {}) => { downloads = downloads.filter(d => String(d.id) !== String(id)); saveDownloads(); });
 ipcMain.on('open-file', (e, { filePath }) => shell.openPath(filePath));
 ipcMain.on('show-in-folder', (e, { filePath }) => shell.showItemInFolder(filePath));
 ipcMain.handle('choose-download-path', async () => {

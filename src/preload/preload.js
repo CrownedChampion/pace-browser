@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('pace', {
   reload:       () => ipcRenderer.send('reload'),
   stop:         () => ipcRenderer.send('stop-loading'),
   newTab:       (url) => ipcRenderer.send('new-tab', { url }),
+  requestTabs:  () => ipcRenderer.send('request-tabs'),
   newTabBg:     (url) => ipcRenderer.send('new-tab-bg', { url }),
   switchTab:    (tabId) => ipcRenderer.send('switch-tab', { tabId }),
   closeTab:     (tabId) => ipcRenderer.send('close-tab', { tabId }),
@@ -48,6 +49,7 @@ contextBridge.exposeInMainWorld('pace', {
   // Downloads
   getDownloads:   () => ipcRenderer.invoke('get-downloads'),
   clearDownloads: () => ipcRenderer.send('clear-downloads'),
+  removeDownload: (id) => ipcRenderer.send('remove-download', { id }),
   openFile:       (p) => ipcRenderer.send('open-file', { filePath: p }),
   showInFolder:   (p) => ipcRenderer.send('show-in-folder', { filePath: p }),
   chooseDownloadPath: () => ipcRenderer.invoke('choose-download-path'),
@@ -112,7 +114,7 @@ contextBridge.exposeInMainWorld('pace', {
   vaultGenerate: (length) => ipcRenderer.invoke('vault-generate', { length }),
 
   on: (channel, fn) => {
-    const allowed = ['tab-created', 'tab-closed', 'tab-switched', 'tab-update', 'tab-loading',
+    const allowed = ['tab-created', 'tab-closed', 'tab-switched', 'tab-update', 'tab-loading', 'tabs-state',
       'download-started', 'download-progress', 'download-done', 'window-state', 'settings-changed', 'relayout', 'settings-panel-closed', 'bookmark-action', 'media-update', 'app-shortcut', 'sidebar-app-closed', 'update-status', 'ask-default-browser', 'bm-bar-action', 'theme-changed'];
     if (!allowed.includes(channel)) return;
     const w = (e, ...args) => fn(...args);
