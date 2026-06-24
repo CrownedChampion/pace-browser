@@ -843,10 +843,10 @@ function closeTab(tabId) {
   try { mainWindow.removeBrowserView(closingView); } catch (e) {}
   delete tabs[tabId]; delete tabMeta[tabId];
   if (idx >= 0) tabOrder.splice(idx, 1);
-  // Next active tab when the active one closed: the tab to the RIGHT, else the new right-most (standard).
+  // Next active tab when the active one closed: the tab to the LEFT (or the new first, if we closed the first).
   if (wasActive) {
     if (tabOrder.length) {
-      activeTabId = tabOrder[Math.min(idx, tabOrder.length - 1)];
+      activeTabId = tabOrder[Math.max(0, idx - 1)];
       applyView();
       try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(tabs[activeTabId].webContents); } catch (e) {}
     } else {
