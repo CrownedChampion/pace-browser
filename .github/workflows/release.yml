@@ -1,0 +1,70 @@
+name: Build & Release Pace Browser
+
+# Push a version tag to cut a release, e.g.:
+#   git tag v1.0.1 && git push origin v1.0.1
+# The workflow sets the app version FROM the tag, builds the Windows installer,
+# and publishes it (plus latest.yml) to a GitHub Release so installed copies auto-update.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Only ONE release build per tag at a time. If a tag is re-pushed, cancel the older run instead
+# of letting two runs race and produce a half-uploaded release (missing .exe / latest.yml).
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # needed to create the release and upload the installer
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Derive version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"          # v1.0.1 -> 1.0.1
+          echo "Releasing version $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Point the auto-updater at THIS repo
+        shell: bash
+        run: |
+          # Auto-fill the publish owner/repo so the shipped app finds updates here,
+          # no manual editing required.
+          sed -i "s|owner: .*|owner: ${{ github.repository_owner }}|" electron-builder.yml
+          sed -i "s|repo: .*|repo: ${{ github.event.repository.name }}|" electron-builder.yml
+          echo "----- electron-builder.yml publish block -----"
+          grep -A4 "^publish:" electron-builder.yml
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Reset & pre-create the GitHub release
+        # electron-builder 26 races with itself when creating the release: parallel upload tasks
+        # each try to create it -> "422 already_exists" kills the run, leaving a half-uploaded
+        # release (only the blockmap, no .exe / latest.yml). We create the release ourselves first
+        # (deleting any stale one for this tag), so electron-builder ONLY uploads to it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release delete "${GITHUB_REF_NAME}" --yes 2>/dev/null || true
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Pace Browser ${GITHUB_REF_NAME}"
+
+      - name: Build & publish (Windows x64)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"   # no code-signing certificate
+        run: npx electron-builder --win --x64 --publish always
