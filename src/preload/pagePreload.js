@@ -375,6 +375,10 @@ else if (window.top === window) {
 
     function onFocusIn(e) {
       const t = e.target;
+      // Focus landing INSIDE our own autofill UI (e.g. the in-dropdown master-password box)
+      // must NOT be treated as a page login field — otherwise we'd rebuild the dropdown and it
+      // would reset on every focus, making it impossible to type the password or click Unlock.
+      if (t && t.closest && t.closest('[data-pace-autofill]')) return;
       if (t && t.tagName === 'INPUT' && t.type === 'password' && isVisible(t)) {
         activeField = t;
         showSuggestions(t);

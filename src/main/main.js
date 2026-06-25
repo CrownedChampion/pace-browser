@@ -800,7 +800,7 @@ function applyView() {
   try { view.webContents.invalidate(); } catch (e) {}
   // Guarantee a frame: a just-attached BrowserView can stay blank until its bounds actually change.
   const target = view;
-  setTimeout(() => {
+  const nudge = () => {
     try {
       if (tabs[activeTabId] !== target || pageHidden) return;
       const c = contentBounds();
@@ -808,7 +808,9 @@ function applyView() {
       target.setBounds(c);
       target.webContents.invalidate();
     } catch (e) {}
-  }, 8);
+  };
+  setTimeout(nudge, 8);
+  setTimeout(nudge, 60);
 }
 
 // Authoritative tab-strip snapshot — the renderer draws this declaratively (no optimistic state).
@@ -883,6 +885,7 @@ function setSidebarView(payload) {
   const { url, bounds } = payload;
   if (!sidebarView) {
     sidebarView = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+    try { sidebarView.webContents.setUserAgent(CHROME_UA); } catch (e) {}   // same clean Chrome UA as tabs, so Google sign-in isn't blocked
     wireMedia(sidebarView.webContents);
     sidebarView._url = ''; sidebarView._attached = false;
   }
