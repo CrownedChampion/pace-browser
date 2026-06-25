@@ -64,7 +64,7 @@
     </a>
     <div class="cta" onclick="installFile()">
       <div class="cta-ico">📦</div>
-      <div><div class="cta-t">Install .paceaddon file…</div><div class="cta-s">A package downloaded from the Shop</div></div>
+      <div><div class="cta-t">Install from file…</div><div class="cta-s">A .paceaddon or .pacetheme from the Shop</div></div>
     </div>
     <div class="cta" onclick="installFolder()">
       <div class="cta-ico">📁</div>
@@ -131,7 +131,7 @@ async function installFolder(){
 async function installFile(){
   try{
     const r=await pace.installAddonFile();
-    if(r&&r.ok){ toast('Installed “'+(r.name||'addon')+'”'); render(); }
+    if(r&&r.ok){ toast(r.kind==='theme'?('Installed & applied theme “'+(r.name||'theme')+'”'):('Installed “'+(r.name||'addon')+'”')); render(); }
     else if(r&&r.reason&&r.reason!=='cancelled'){ toast(r.reason); }
   }catch(e){ toast('Install failed'); }
 }

@@ -575,6 +575,7 @@ function createMainWindow() {
       dl.state = state; dl.received = item.getReceivedBytes();
       mainWindow.webContents.send('download-done', { id: dlId, state, savePath });
       saveDownloads();
+      if (state === 'completed') maybeAutoInstallTheme(savePath);
     });
   });
 }
@@ -1412,12 +1413,33 @@ ipcMain.handle('install-addon-folder', async () => {
 });
 ipcMain.handle('install-addon-file', async () => {
   try {
-    const r = await dialog.showOpenDialog(mainWindow, { title: 'Select a .paceaddon file', properties: ['openFile'], filters: [{ name: 'Pace Addon', extensions: ['paceaddon', 'zip'] }] });
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Select a .paceaddon or .pacetheme file', properties: ['openFile'], filters: [{ name: 'Pace Add-on or Theme', extensions: ['paceaddon', 'pacetheme', 'zip'] }] });
     if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, reason: 'cancelled' };
+    const fp = r.filePaths[0];
+    if (/\.pacetheme$/i.test(fp)) {
+      let doc = null;
+      try { doc = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (e) { return { ok: false, reason: 'That .pacetheme file is not valid JSON.' }; }
+      const res = themes.install(doc);
+      if (res && res.ok) { try { themes.apply(res.id); } catch (e) {} try { sendToAll('theme-changed', themes.active()); } catch (e) {} return { ok: true, name: res.name, kind: 'theme' }; }
+      return { ok: false, reason: (res && res.error) || 'Could not install that theme.' };
+    }
     if (!(await addonInstallWarning())) return { ok: false, reason: 'cancelled' };
-    return addons.installFromZip(r.filePaths[0]);
+    return addons.installFromZip(fp);
   } catch (e) { return { ok: false, reason: 'Install failed.' }; }
 });
+// Auto-install a .pacetheme that was just downloaded (e.g. the shop's "Get" button), and apply it.
+function maybeAutoInstallTheme(filePath) {
+  try {
+    if (!/\.pacetheme$/i.test(String(filePath || ''))) return;
+    let doc = null;
+    try { doc = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (e) { return; }
+    const r = themes.install(doc);
+    if (r && r.ok) {
+      try { themes.apply(r.id); } catch (e) {}
+      try { sendToAll('theme-changed', themes.active()); } catch (e) {}
+    }
+  } catch (e) {}
+}
 
 ipcMain.handle('clear-browsing-data', async () => {
   try {

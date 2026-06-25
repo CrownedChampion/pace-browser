@@ -76,23 +76,20 @@ body.no-anim #ambient::before,body.no-anim #ambient::after{animation:none}
 }
 .tab:hover{background:var(--glass-2);transform:translateY(-1px)}
 .tab.active{
-  background:transparent;
+  background:var(--glass-2);
   border-color:transparent;
   box-shadow:none;
-  -webkit-backdrop-filter:none;backdrop-filter:none;
 }
 /* a single highlight that glides behind the active tab (never snaps to the left wall) */
 #tab-hl{
   position:absolute;left:0;top:50%;height:30px;width:0;
   transform:translate(0,-50%);
   border-radius:10px;
-  background:var(--glass-2);
+  background:transparent;
   border:1px solid var(--acc);
-  box-shadow:inset 0 0 0 1px var(--acc), inset 0 1px 0 var(--glass-hi), 0 4px 16px -6px var(--acc-glow);
-  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
-  backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow:inset 0 0 0 1px var(--acc), 0 4px 16px -6px var(--acc-glow);
   transition:transform .27s var(--ease), width .27s var(--ease), opacity .18s var(--ease);
-  opacity:0;pointer-events:none;z-index:0;
+  opacity:0;pointer-events:none;z-index:3;
 }
 #tab-hl::after{content:'';position:absolute;left:6px;right:6px;top:0;height:2px;border-radius:0 0 2px 2px;background:linear-gradient(90deg,transparent,var(--acc),var(--acc2),transparent);opacity:.95}
 .tab-fav{width:15px;height:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--t2)}
@@ -993,9 +990,9 @@ function bindTabEvents(){
     const activeChanged = (snap.active !== prevActive);
     if(activeChanged) saveAddrDraft();   // stash the address draft for the tab we're leaving
     // Rebuild the local tab map from the authoritative snapshot, preserving renderer-only fields (drafts).
-    const map={};
-    (snap.tabs||[]).forEach(t=>{ const old=tabs[t.id]||{}; map[t.id]={ ...old, tabId:t.id, url:t.url, title:t.title||t.url, loading:!!t.loading, favicon:t.favicon||'', canGoBack:!!t.canGoBack, canGoForward:!!t.canGoForward }; });
-    tabs=map;
+    const map={}; const order=[];
+    (snap.tabs||[]).forEach(t=>{ const old=tabs[t.id]||{}; map[t.id]={ ...old, tabId:t.id, url:t.url, title:t.title||t.url, loading:!!t.loading, favicon:t.favicon||'', canGoBack:!!t.canGoBack, canGoForward:!!t.canGoForward }; order.push(t.id); });
+    tabs=map; tabOrderR=order;
     activeTabId=snap.active;
     renderTabs();
     const at=tabs[activeTabId];
@@ -1027,13 +1024,19 @@ function bindTabEvents(){
   scroll.addEventListener('mouseleave',stopEdge);
 }
 
+let hlInit=false;
+let tabOrderR=[];
 function renderTabs(){
   const list=document.getElementById('tab-list');
-  const arr=Object.values(tabs);
+  if(!list)return;
+  const hl=document.getElementById('tab-hl');
+  // Keep the sliding highlight as the very first child so tab ordering never disturbs it.
+  if(hl && list.firstElementChild!==hl) list.insertBefore(hl, list.firstChild);
+
   const favHtmlFor=t=>(t.url&&t.url.startsWith('pace://'))?tabIconFor(t):(t.favicon?'<img src="'+esc(t.favicon)+'" onerror="this.style.display=\'none\'">':tabIconFor(t));
   function makeEl(t){
     const el=document.createElement('div');
-    el.className='tab'+(t.tabId===activeTabId?' active':'')+(t.loading?' loading':'');
+    el.className='tab';
     el.dataset.id=t.tabId;
     el.innerHTML='<span class="tab-fav">'+favHtmlFor(t)+'</span><div class="tab-spin"></div><span class="tab-title">'+esc(t.title||'New Tab')+'</span><span class="tab-close" data-close="'+t.tabId+'"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>';
     el._favSig=favHtmlFor(t);
@@ -1043,52 +1046,60 @@ function renderTabs(){
     const x=el.querySelector('[data-close]'); if(x)x.addEventListener('click',e=>{e.stopPropagation();pace.closeTab(+x.dataset.close);});
     return el;
   }
-  // Remove only the elements whose tab is gone — never touch the others (so the active tab's
-  // highlight is never destroyed and re-created, which was the source of the flicker).
-  const want=new Set(arr.map(t=>String(t.tabId)));
+
+  // Render in the authoritative order from the latest snapshot (fall back to whatever we have).
+  let order = (tabOrderR && tabOrderR.length) ? tabOrderR.slice() : Object.keys(tabs).map(Number);
+  order = order.filter(id=>tabs[id]);
+  // There is ALWAYS exactly one active tab: if the chosen active isn't present, fall back to the first.
+  if(!tabs[activeTabId]) activeTabId = order.length ? order[0] : null;
+
+  // Drop elements for tabs that no longer exist.
+  const want=new Set(order.map(String));
   [...list.querySelectorAll('.tab')].forEach(el=>{ if(!want.has(el.dataset.id)) el.remove(); });
-  // Get-or-create each tab element, update it in place, and put it at the right position.
-  arr.forEach((t,idx)=>{
-    let el=list.querySelector('.tab[data-id="'+t.tabId+'"]');
-    if(!el){ el=makeEl(t); }
+
+  // Create/update each tab, set its state, and lay them out in order right after the highlight.
+  let prev = hl || null;
+  order.forEach(id=>{
+    const t=tabs[id]; if(!t) return;
+    let el=list.querySelector('.tab[data-id="'+id+'"]');
+    if(!el) el=makeEl(t);
     else {
-      el.classList.toggle('active',t.tabId===activeTabId);
-      el.classList.toggle('loading',!!t.loading);
       const titleEl=el.querySelector('.tab-title'); const wantTitle=t.title||'New Tab';
       if(titleEl&&titleEl.textContent!==wantTitle)titleEl.textContent=wantTitle;
       const favEl=el.querySelector('.tab-fav'); const fav=favHtmlFor(t);
       if(favEl&&el._favSig!==fav){favEl.innerHTML=fav;el._favSig=fav;}
     }
-    const cur=list.children[idx];
-    if(cur!==el) list.insertBefore(el, cur||null);
+    el.classList.toggle('active', id===activeTabId);
+    el.classList.toggle('loading', !!t.loading);
+    const ref = prev ? prev.nextSibling : list.firstChild;
+    if(ref!==el) list.insertBefore(el, ref);
+    prev = el;
   });
-  // ── HIGHLIGHT: strictly mirror the active tab the MAIN process chose ────────────
-  // Light up exactly the tab whose id is activeTabId — never adopt the first tab as a fallback (that
-  // was what made the page jump to tab 1). If activeTabId is briefly between values, no tab is lit for
-  // that instant and the very next event (tab-switched / tab-created) corrects it.
-  [...list.querySelectorAll('.tab')].forEach(el=>el.classList.toggle('active', Number(el.dataset.id)===activeTabId));
+
   updatePlusButton();
   updateTabOverflow();
   positionHighlight();
 }
-let hlInit=false;
 function positionHighlight(){
   const list=document.getElementById('tab-list');
   const hl=document.getElementById('tab-hl');
   if(!list||!hl)return;
-  const act=list.querySelector('.tab.active');
-  if(!act){ hl.style.opacity='0'; return; }                 // no active tab → fade out but keep position (never snaps to the wall)
-  const x=act.offsetLeft, w=act.offsetWidth;
-  if(!hlInit){                                              // first placement: appear in-place so it never slides in from x=0
-    hl.style.transition='none';
-    hl.style.transform='translate('+x+'px,-50%)'; hl.style.width=w+'px';
-    void hl.offsetWidth;                                    // commit the jump before re-enabling the glide
-    hl.style.transition='';
-    hlInit=true;
-  } else {
-    hl.style.transform='translate('+x+'px,-50%)'; hl.style.width=w+'px';
-  }
-  hl.style.opacity='1';
+  // The slider always rides the active tab; if for any reason none is marked, fall back to the first tab.
+  const act=list.querySelector('.tab.active')||list.querySelector('.tab');
+  if(!act){ hl.style.opacity='0'; return; }   // only when there are genuinely no tabs at all
+  const apply=()=>{
+    const x=act.offsetLeft, w=act.offsetWidth;
+    if(!w){ requestAnimationFrame(apply); return; }   // not laid out yet — try again next frame
+    if(!hlInit){                                       // first placement: appear in-place, never slide in from x=0
+      hl.style.transition='none';
+      hl.style.transform='translate('+x+'px,-50%)'; hl.style.width=w+'px';
+      void hl.offsetWidth; hl.style.transition=''; hlInit=true;
+    } else {
+      hl.style.transform='translate('+x+'px,-50%)'; hl.style.width=w+'px';
+    }
+    hl.style.opacity='1';
+  };
+  apply();
 }
 function updatePlusButton(){
   const scroll=document.getElementById('tab-scroll');

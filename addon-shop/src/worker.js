@@ -701,7 +701,7 @@ function appShell() {
       return '<div class="card" data-thm="'+esc(a.id)+'" style="animation-delay:'+(i*40)+'ms">'+
         themePreview(a.preview)+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><div style="min-width:0"><div class="nm">'+esc(a.name)+(a.featured?' <span class="pillv">Built-in</span>':'')+'</div><div class="by">by '+esc(a.author||a.handle||"unknown")+'</div></div>'+
-        '<button class="btn btn-p btn-sm" data-get-thm="'+esc(a.id)+'">Get</button></div></div>';
+        '<button class="btn btn-p btn-sm" data-get-thm="'+esc(a.id)+'">Install</button></div></div>';
     }).join("");
   }
 
@@ -726,8 +726,8 @@ function appShell() {
       themePreview(a.preview)+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 18px"><div><div style="font-size:21px;font-weight:680;letter-spacing:-.02em">'+esc(a.name)+(a.featured?' <span class="pillv">Built-in</span>':'')+'</div><div class="by">by '+esc(a.author||a.handle||"unknown")+' \\u00b7 v'+esc(a.version||"1.0.0")+'</div></div></div>'+
       '<p style="color:var(--t2);font-size:14.5px;line-height:1.6;margin-bottom:22px">'+esc(a.description||"A Pace theme.")+'</p>'+
-      '<button class="btn btn-p" style="width:100%" data-get-thm="'+esc(a.id)+'">Get theme</button>'+
-      '<p class="muted">Downloads a .pacetheme file \\u2014 open Pace \\u2192 Themes and install it.</p>'
+      '<button class="btn btn-p" style="width:100%" data-get-thm="'+esc(a.id)+'">Install theme</button>'+
+      '<p class="muted">Installs into Pace and applies instantly. Manage it any time under Themes.</p>'
     );
   }
   function showModal(html){
@@ -737,7 +737,7 @@ function appShell() {
   function closeModal(){$("modal").classList.remove("on");}
 
   function getExt(id){window.location.href="/download/"+encodeURIComponent(id);toast("Starting download\\u2026","ok");}
-  function getThm(id){window.location.href="/download-theme/"+encodeURIComponent(id);toast("Starting download\\u2026","ok");}
+  function getThm(id){window.location.href="/download-theme/"+encodeURIComponent(id);toast("Installing theme\\u2026","ok");}
 
   // ── developer hub ──
   function renderDev(){
