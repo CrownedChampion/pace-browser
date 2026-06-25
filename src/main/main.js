@@ -839,15 +839,16 @@ function closeTab(tabId) {
   if (!tabs[tabId]) return;
   const wasActive = activeTabId === tabId;
   const idx = tabOrder.indexOf(tabId);
+  const leftId = idx > 0 ? tabOrder[idx - 1] : null;   // the tab immediately to the LEFT (captured before we mutate the list)
   try { const u = formatUrl(tabs[tabId].webContents.getURL()); if (u && u !== 'pace://newtab') { closedTabs.push(u); if (closedTabs.length > 25) closedTabs.shift(); } } catch (e) {}
   const closingView = tabs[tabId];
   try { mainWindow.removeBrowserView(closingView); } catch (e) {}
   delete tabs[tabId]; delete tabMeta[tabId];
   if (idx >= 0) tabOrder.splice(idx, 1);
-  // Next active tab when the active one closed: the tab to the LEFT (or the new first, if we closed the first).
+  // When the active tab closes, switch to the tab on its LEFT (or the new first tab if it had none).
   if (wasActive) {
     if (tabOrder.length) {
-      activeTabId = tabOrder[Math.max(0, idx - 1)];
+      activeTabId = (leftId != null && tabs[leftId]) ? leftId : tabOrder[0];
       applyView();
       try { if (chromeExtensions && chromeExtensions.selectTab) chromeExtensions.selectTab(tabs[activeTabId].webContents); } catch (e) {}
     } else {

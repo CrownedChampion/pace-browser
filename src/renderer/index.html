@@ -1084,12 +1084,14 @@ function positionHighlight(){
   const list=document.getElementById('tab-list');
   const hl=document.getElementById('tab-hl');
   if(!list||!hl)return;
-  // The slider always rides the active tab; if for any reason none is marked, fall back to the first tab.
-  const act=list.querySelector('.tab.active')||list.querySelector('.tab');
-  if(!act){ hl.style.opacity='0'; return; }   // only when there are genuinely no tabs at all
+  const act=list.querySelector('.tab.active');
+  if(!act){                                            // no active tab is marked right now
+    if(!list.querySelector('.tab')) hl.style.opacity='0';   // genuinely no tabs → hide the slider
+    return;                                            // otherwise leave it where it is — NEVER jump to the first tab
+  }
   const apply=()=>{
     const x=act.offsetLeft, w=act.offsetWidth;
-    if(!w){ requestAnimationFrame(apply); return; }   // not laid out yet — try again next frame
+    if(!w){ requestAnimationFrame(apply); return; }    // not laid out yet — try again next frame
     if(!hlInit){                                       // first placement: appear in-place, never slide in from x=0
       hl.style.transition='none';
       hl.style.transform='translate('+x+'px,-50%)'; hl.style.width=w+'px';
