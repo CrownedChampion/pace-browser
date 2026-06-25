@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Settings — Pace</title>
+<style>
+:root{
+  --acc:#5b8ef0;--acc2:#a78bfa;--glow:rgba(91,142,240,.2);
+  --bg:#0a0a12;
+  --glass:rgba(28,29,46,.55);--glass-2:rgba(40,42,66,.62);--glass-hi:rgba(255,255,255,.09);
+  --border:rgba(255,255,255,.08);--hover:rgba(255,255,255,.08);
+  --t1:#f1f1fb;--t2:#9d9dc8;--t3:#5c5c7e;
+  --font:'Segoe UI Variable','Segoe UI',-apple-system,'Inter',system-ui,sans-serif;
+  --r-sm:9px;--r-md:14px;--r-lg:18px;--r-pill:999px;--ease:cubic-bezier(.22,.8,.32,1);--blur:30px;--sat:170%;
+}
+body.light{--bg:#eef1fb;--glass:rgba(255,255,255,.62);--glass-2:rgba(255,255,255,.74);--glass-hi:rgba(255,255,255,.85);--border:rgba(20,24,60,.1);--hover:rgba(20,24,60,.06);--t1:#13132b;--t2:#4f5388;--t3:#9a9ec4}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--t1);min-height:100vh;transition:background .25s,color .25s}
+#ambient{position:fixed;inset:0;overflow:hidden;pointer-events:none}
+#ambient::before,#ambient::after{content:'';position:absolute;border-radius:50%;filter:blur(80px);opacity:.4}
+#ambient::before{width:48vw;height:48vw;left:-8vw;top:-12vw;background:radial-gradient(circle,var(--acc),transparent 70%)}
+#ambient::after{width:42vw;height:42vw;right:-10vw;bottom:-10vw;background:radial-gradient(circle,var(--acc2),transparent 70%)}
+.page{position:relative;z-index:1;max-width:720px;margin:0 auto;padding:44px 24px 90px}
+.ph{display:flex;align-items:center;gap:14px;margin-bottom:34px}
+.ph-name{font-size:20px;font-weight:900;background:linear-gradient(135deg,var(--acc),var(--acc2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.ph-right{flex:1}.ph-title{font-size:26px;font-weight:700}.ph-sub{font-size:13px;color:var(--t2);margin-top:2px}
+.ph-close{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--glass);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.ph-close:hover{background:var(--hover);color:var(--t1);border-color:var(--acc)}
+.search-row{position:relative;margin-bottom:24px}
+.settings-search{width:100%;height:44px;border-radius:var(--r-pill);background:var(--glass);border:1.5px solid var(--border);color:var(--t1);font-family:var(--font);font-size:14px;padding:0 40px 0 42px;outline:none;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);transition:border-color .2s}
+.settings-search:focus{border-color:var(--acc)}
+.search-ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.7;pointer-events:none}
+.search-clear{position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:13px}
+.search-clear:hover{color:var(--t1)}
+.no-results{text-align:center;padding:28px;color:var(--t3);font-size:13px}
+.section{margin-bottom:26px}
+.sec-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:9px;padding-left:2px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:14px 17px;margin-bottom:5px;border-radius:var(--r-md);
+  background:var(--glass);-webkit-backdrop-filter:blur(var(--blur)) saturate(var(--sat));backdrop-filter:blur(var(--blur)) saturate(var(--sat));
+  border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--glass-hi);transition:border-color .15s}
+.row:hover{border-color:var(--glow)}
+.row-left{flex:1;min-width:0}.row-label{font-size:14px;color:var(--t1);font-weight:500}.row-sub{font-size:12px;color:var(--t2);margin-top:2px}
+.row-right{flex-shrink:0;margin-left:16px}
+.row.col{flex-direction:column;align-items:flex-start}
+.toggle{width:42px;height:24px;background:var(--hover);border-radius:var(--r-pill);position:relative;cursor:pointer;transition:background .25s;border:1.5px solid var(--border);flex-shrink:0}
+.toggle.on{background:var(--acc);border-color:var(--acc)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .25s var(--ease);box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.toggle.on::after{transform:translateX(18px)}
+select,.txt{background:var(--hover);border:1.5px solid var(--border);color:var(--t1);font-family:var(--font);font-size:13px;padding:8px 12px;border-radius:var(--r-sm);cursor:pointer;outline:none;transition:border-color .2s}
+select:focus,.txt:focus{border-color:var(--acc)}
+select option{color:#111;background:#fff}
+.txt{cursor:text;width:100%}
+.color-grid{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;transition:border-color .15s,transform .15s}
+.swatch:hover{transform:scale(1.18)}.swatch.active{border-color:var(--t1)}
+.sw-custom{width:26px;height:26px;border-radius:50%;border:1.5px dashed var(--t3);background:transparent;cursor:pointer;padding:0;position:relative;overflow:hidden}
+.sw-custom input{position:absolute;inset:-6px;cursor:pointer;opacity:0}
+.btn{padding:9px 18px;border-radius:var(--r-pill);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);border:none;transition:all .15s}
+.btn-danger{background:rgba(255,60,60,.12);color:#ff5560;border:1.5px solid rgba(255,60,60,.28)}
+.btn-danger:hover{background:rgba(255,60,60,.22)}
+.btn-ghost{background:var(--hover);color:var(--t2);border:1.5px solid var(--border)}
+.btn-ghost:hover{background:var(--glass-2);color:var(--t1)}
+.about-card{padding:22px;border-radius:var(--r-lg);background:var(--glass);-webkit-backdrop-filter:blur(var(--blur));backdrop-filter:blur(var(--blur));border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--glass-hi)}
+.about-logo-img{width:72px;height:72px;border-radius:16px;display:block;margin:0 0 12px;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+.btn-primary{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff}
+.btn-primary:hover{filter:brightness(1.08)}
+.about-logo{font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--acc),var(--acc2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.about-ver{font-size:12px;color:var(--t2);margin-bottom:8px}.about-dev{font-size:13px;font-weight:600;margin-bottom:12px}
+.about-links{display:flex;gap:8px;flex-wrap:wrap}
+.about-link{color:var(--acc);font-size:12px;text-decoration:none;padding:6px 13px;border-radius:var(--r-pill);border:1px solid var(--glow);transition:background .15s;cursor:pointer}
+.about-link:hover{background:var(--glow)}
+.filter-tags,.lg-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.ftag{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:var(--r-pill);background:var(--hover);border:1px solid var(--border);font-size:11px;color:var(--t2)}
+.ftag .rm{cursor:pointer;color:var(--t3);font-size:9px}.ftag .rm:hover{color:#ff5560}
+.filter-add-row{display:flex;gap:6px;width:100%}
+.btn-add{padding:7px 15px;border-radius:var(--r-pill);background:var(--glow);border:1px solid var(--acc);color:var(--acc);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.lg-chip{padding:5px 13px;border-radius:var(--r-pill);border:1.5px solid var(--border);background:transparent;color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font);transition:all .15s}
+.lg-chip.on{border-color:var(--acc);background:var(--glow);color:var(--acc)}
+#save-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);border-radius:var(--r-pill);padding:11px 24px;font-size:13px;font-weight:600;color:var(--t1);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s;
+  background:var(--glass-2);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border:1px solid #37cf83;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#save-toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="ambient"></div>
+<div class="page">
+  <div class="ph">
+    <svg width="34" height="34" viewBox="0 0 32 32" fill="none">
+      <line x1="1" y1="10" x2="8" y2="10" stroke="var(--acc)" stroke-width="2" stroke-linecap="round" opacity=".9"/>
+      <line x1="1" y1="16" x2="6" y2="16" stroke="var(--acc)" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+      <line x1="1" y1="22" x2="8" y2="22" stroke="var(--acc)" stroke-width="2" stroke-linecap="round" opacity=".35"/>
+      <path d="M10 7v18M10 7h7a5 5 0 0 1 0 10H10" stroke="url(#gs)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="gs" x1="10" y1="7" x2="22" y2="25" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8ef0"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+    </svg>
+    <div class="ph-right"><div class="ph-title">Settings</div><div class="ph-sub">All changes save instantly</div></div>
+  </div>
+
+  <div class="search-row">
+    <span class="search-ic">🔍</span>
+    <input id="settings-search" class="settings-search" type="text" placeholder="Search settings…" autocomplete="off" oninput="filterSettings(this.value)">
+    <span class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none">✕</span>
+  </div>
+  <div id="no-results" class="no-results" style="display:none">No settings match your search.</div>
+
+  <div class="section">
+    <div class="sec-lbl">Performance</div>
+    <div class="row"><div class="row-left"><div class="row-label">⚡ Fast Mode</div><div class="row-sub">Pre-loads sites as you type in the address bar</div></div><div class="row-right"><div class="toggle" id="tog-fastMode" onclick="toggleSetting('fastMode',this)"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔢 Preload limit</div><div class="row-sub">How many pages Fast Mode keeps warm</div></div>
+      <div class="row-right"><select id="sel-preload" onchange="setNum('preloadCount',this.value)"><option value="3">3</option><option value="6">6</option><option value="10">10</option><option value="15">15</option></select></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🪶 Light Resources Mode</div><div class="row-sub">Disables preloading &amp; animations to save RAM/CPU</div></div><div class="row-right"><div class="toggle" id="tog-lightResources" onclick="toggleSetting('lightResources',this)"></div></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Search &amp; Navigation</div>
+    <div class="row"><div class="row-left"><div class="row-label">🔍 Default Search Engine</div><div class="row-sub">Used in the address bar and new tab search</div></div>
+      <div class="row-right"><select id="sel-engine" onchange="setSetting('searchEngine',this.value)">
+        <option value="google">Google</option><option value="bing">Bing</option><option value="duckduckgo">DuckDuckGo</option><option value="brave">Brave Search</option><option value="ecosia">Ecosia</option><option value="startpage">Startpage</option>
+      </select></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Privacy &amp; Security</div>
+    <div class="row"><div class="row-left"><div class="row-label">🛡 Ad &amp; Tracker Blocking</div><div class="row-sub">Block ads, pop-ups and cross-site trackers</div></div><div class="row-right"><div class="toggle" id="tog-adBlock" onclick="toggleSetting('adBlock',this)"></div></div></div>
+    <div class="row col"><div class="row-label" style="margin-bottom:4px">Block Filter Keywords</div><div class="row-sub" style="margin-bottom:9px">Requests with URLs containing these words are blocked</div>
+      <div style="width:100%"><div class="filter-tags" id="filter-tags"></div><div class="filter-add-row"><input class="txt" id="filter-input" placeholder="e.g. doubleclick, tracker"><button class="btn-add" onclick="addFilter()">Add</button></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔒 HTTPS-Only Mode</div><div class="row-sub">Automatically upgrade insecure pages to HTTPS</div></div><div class="row-right"><div class="toggle" id="tog-httpsOnly" onclick="toggleSetting('httpsOnly',this)"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🗑 Clear Data on Exit</div><div class="row-sub">Delete history and cookies when Pace closes</div></div><div class="row-right"><div class="toggle" id="tog-clearOnExit" onclick="toggleSetting('clearOnExit',this)"></div></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Appearance &amp; Theme</div>
+    <div class="row"><div class="row-left"><div class="row-label">🌓 Theme</div><div class="row-sub">Dark or light mode</div></div>
+      <div class="row-right"><select id="sel-theme" onchange="setTheme(this.value)"><option value="dark">Dark</option><option value="light">Light</option></select></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🎨 Accent Color</div><div class="row-sub">Primary highlight color</div></div><div class="row-right"><div class="color-grid" id="color-grid"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🌈 Secondary Color</div><div class="row-sub">Used in gradients &amp; the logo</div></div><div class="row-right"><div class="color-grid" id="color-grid2"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔠 Font Size</div><div class="row-sub">Interface text scaling</div></div>
+      <div class="row-right"><select id="sel-font" onchange="setSetting('fontSize',this.value)"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></div></div>
+    <div class="row col"><div class="row-label" style="margin-bottom:4px">🖼 New Tab Wallpaper</div><div class="row-sub" style="margin-bottom:9px">Paste an image URL, or leave blank for the default gradient</div>
+      <div class="filter-add-row"><input class="txt" id="wallpaper-input" placeholder="https://images…/photo.jpg"><button class="btn-add" onclick="saveWallpaper()">Set</button><button class="btn-ghost" style="padding:7px 14px" onclick="clearWallpaper()">Clear</button></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">✨ Animations</div><div class="row-sub">Smooth UI transitions and the ambient background</div></div><div class="row-right"><div class="toggle" id="tog-animations" onclick="toggleSetting('animations',this)"></div></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Toolbar Buttons</div>
+    <div class="row"><div class="row-left"><div class="row-label">⬇ Downloads</div></div><div class="row-right"><div class="toggle" id="tb-downloads" onclick="toggleToolbar('downloads',this)"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🧩 Extensions</div></div><div class="row-right"><div class="toggle" id="tb-extensions" onclick="toggleToolbar('extensions',this)"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">📱 Apps Sidebar</div></div><div class="row-right"><div class="toggle" id="tb-apps" onclick="toggleToolbar('apps',this)"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">📜 History</div></div><div class="row-right"><div class="toggle" id="tb-history" onclick="toggleToolbar('history',this)"></div></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔖 Bookmarks Bar</div><div class="row-sub">Show the bookmarks strip below the toolbar (Ctrl+Shift+B)</div></div><div class="row-right"><div class="toggle" id="tog-showBookmarksBar" onclick="toggleSetting('showBookmarksBar',this)"></div></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Sports Scores</div>
+    <div class="row"><div class="row-left"><div class="row-label">🏆 Show Live Scores widget</div><div class="row-sub">On the new tab page</div></div><div class="row-right"><div class="toggle" id="tog-showSportsWidget" onclick="toggleSetting('showSportsWidget',this)"></div></div></div>
+    <div class="row col"><div class="row-label" style="margin-bottom:4px">Followed Leagues</div><div class="row-sub" style="margin-bottom:9px">Scores from the leagues you pick will appear on the new tab</div>
+      <div class="lg-chips" id="lg-chips" style="width:100%"></div></div>
+    <div class="row col"><div class="row-label" style="margin-bottom:4px">Filter by Team (optional)</div><div class="row-sub" style="margin-bottom:9px">Comma-separated abbreviations or names — only matching games show</div>
+      <div class="filter-add-row"><input class="txt" id="teams-input" placeholder="e.g. PHI, Lakers, Arsenal"><button class="btn-add" onclick="saveTeams()">Save</button></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Data</div>
+    <div class="row"><div class="row-left"><div class="row-label">📁 Download Location</div><div class="row-sub" id="dl-path-lbl">Loading…</div></div><div class="row-right"><button class="btn btn-ghost" onclick="changeDlPath()">Change</button></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">📜 Browsing History</div></div><div class="row-right"><a class="about-link" onclick="navigate('pace://history')">View History</a></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🧩 Extensions</div></div><div class="row-right"><a class="about-link" onclick="navigate('pace://extensions')">Manage</a></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔐 Passwords</div><div class="row-sub">Your encrypted password vault</div></div><div class="row-right"><a class="about-link" onclick="navigate('pace://passwords')">Open</a></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🗑 Clear All Browsing Data</div><div class="row-sub">History, cookies, cache</div></div><div class="row-right"><button class="btn btn-danger" onclick="clearData()">Clear Now</button></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">🔖 Clear Bookmarks</div><div class="row-sub">Remove bookmarks from the bar, the Other folder, or everything</div></div><div class="row-right" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-ghost" onclick="clearBm('bar',this)">Clear bar</button><button class="btn btn-ghost" onclick="clearBm('other',this)">Clear other</button><button class="btn btn-danger" onclick="clearBm('all',this)">Clear all</button></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">Default browser &amp; updates</div>
+    <div class="row"><div class="row-left"><div class="row-label">🌐 Default Browser</div><div class="row-sub" id="default-sub">Checking…</div></div><div class="row-right"><button class="btn btn-ghost" id="default-btn" onclick="makeDefault()">Make default</button></div></div>
+    <div class="row"><div class="row-left"><div class="row-label">⬆ Software Updates</div><div class="row-sub" id="update-sub">Pace checks for updates automatically and installs them in the background.</div></div><div class="row-right"><button class="btn btn-ghost" id="update-btn" onclick="checkUpdates()">Check for updates</button></div></div>
+    <div class="row" id="restart-row" style="display:none"><div class="row-left"><div class="row-label">✅ Update ready</div><div class="row-sub">Restart Pace to finish updating.</div></div><div class="row-right"><button class="btn btn-primary" onclick="restartNow()">Restart now</button></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-lbl">About</div>
+    <div class="about-card">
+      <img class="about-logo-img" src="../assets/icons/icon-128.png" alt="Pace Browser">
+      <div class="about-logo">Pace Browser</div>
+      <div class="about-ver" id="about-ver">Version 1.0.0 · Chromium Engine · Windows x64</div>
+      <div class="about-dev">Developed by That1Dev</div>
+      <div class="about-links"><a class="about-link" onclick="navigate('pace://tos')">Terms of Service</a><a class="about-link" onclick="navigate('pace://privacy')">Privacy Policy</a></div>
+    </div>
+  </div>
+</div>
+
+<div id="save-toast">✅ Saved</div>
+
+<script>
+const ACCENTS=['#5b8ef0','#a78bfa','#f059a5','#f07032','#37cf83','#f0c832','#5ccafc','#e05bf0','#ff5560','#22c1c3'];
+const LEAGUES=[['nfl','🏈 NFL'],['nba','🏀 NBA'],['nhl','🏒 NHL'],['mlb','⚾ MLB'],['ncaaf','🏈 CFB'],['ncaab','🏀 CBB'],['epl','⚽ Premier League'],['mls','⚽ MLS'],['laliga','⚽ La Liga'],['ucl','⚽ Champions Lg']];
+let settings={}, filters=[];
+
+function navigate(url){if(window.pace)window.pace.navigate(url);}
+function closePanel(){ if(window.pace&&window.pace.closeSettings)window.pace.closeSettings(); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closePanel(); });
+
+function filterSettings(q){
+  q=(q||'').trim().toLowerCase();
+  document.getElementById('search-clear').style.display=q?'block':'none';
+  let anyVisible=false;
+  document.querySelectorAll('.section').forEach(sec=>{
+    let secVisible=false;
+    sec.querySelectorAll('.row').forEach(row=>{
+      const txt=(row.textContent||'').toLowerCase();
+      const match=!q||txt.indexOf(q)>=0;
+      row.style.display=match?'':'none';
+      if(match)secVisible=true;
+    });
+    const secLbl=sec.querySelector('.sec-lbl');
+    const secMatch=q&&secLbl&&secLbl.textContent.toLowerCase().indexOf(q)>=0;
+    if(secMatch){ sec.querySelectorAll('.row').forEach(r=>r.style.display=''); secVisible=true; }
+    sec.style.display=secVisible?'':'none';
+    if(secVisible)anyVisible=true;
+  });
+  document.getElementById('no-results').style.display=anyVisible?'none':'block';
+}
+function clearSearch(){ const i=document.getElementById('settings-search'); i.value=''; filterSettings(''); i.focus(); }
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function applyAccentVars(){ const r=document.documentElement.style; if(settings.accentColor){r.setProperty('--acc',settings.accentColor);r.setProperty('--glow',hexA(settings.accentColor,.2));} if(settings.accentColor2)r.setProperty('--acc2',settings.accentColor2); }
+function hexA(hex,a){const m=hex.replace('#',''),n=m.length===3?m.split('').map(c=>c+c).join(''):m;return 'rgba('+parseInt(n.slice(0,2),16)+','+parseInt(n.slice(2,4),16)+','+parseInt(n.slice(4,6),16)+','+a+')';}
+
+async function init(){
+  try{ if(window.pace) settings=await window.pace.getSettings()||{}; }catch(e){ settings={}; }
+  syncUI();
+  if(window.pace&&window.pace.on){ window.pace.on('settings-changed',s=>{ settings={...settings,...s}; syncUI(); }); window.pace.on('update-status',onUpdateStatus); }
+  initAbout();
+}
+async function initAbout(){
+  try{ if(window.pace&&window.pace.appVersion){ const v=await window.pace.appVersion(); const el=document.getElementById('about-ver'); if(el)el.textContent='Version '+v+' · Chromium Engine · Windows x64'; } }catch(e){}
+  refreshDefaultStatus();
+}
+async function refreshDefaultStatus(){
+  const sub=document.getElementById('default-sub'), btn=document.getElementById('default-btn'); if(!sub)return;
+  try{
+    const r=window.pace&&window.pace.getDefaultBrowserStatus?await window.pace.getDefaultBrowserStatus():{isDefault:false};
+    if(r&&r.isDefault){ sub.textContent='Pace is your default browser.'; if(btn){btn.textContent='Default ✓';btn.disabled=true;} }
+    else { sub.textContent='Set Pace as your default browser for links and web files.'; if(btn){btn.textContent='Make default';btn.disabled=false;} }
+  }catch(e){}
+}
+async function makeDefault(){
+  if(!(window.pace&&window.pace.setDefaultBrowser))return;
+  const r=await window.pace.setDefaultBrowser();
+  if(r&&r.isDefault) toast('Pace is now your default browser');
+  else toast('Windows Settings opened — pick Pace under "Web browser"');
+  setTimeout(refreshDefaultStatus,1500);
+}
+async function checkUpdates(){
+  const sub=document.getElementById('update-sub'), btn=document.getElementById('update-btn'), restart=document.getElementById('restart-row');
+  if(!(window.pace&&window.pace.checkForUpdates)){ if(sub)sub.textContent='Updater unavailable in this build.'; return; }
+  if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  if(sub)sub.textContent='Checking for updates…';
+  const r=await window.pace.checkForUpdates();
+  if(btn){btn.disabled=false;btn.textContent='Check for updates';}
+  if(r&&r.ok){
+    if(r.downloaded){ if(sub)sub.textContent='Update v'+(r.version||'')+' is ready — restart to install.'; if(restart)restart.style.display=''; }
+    else if(r.upToDate){ if(sub)sub.textContent='You’re on the latest version (v'+(r.version||'')+').'; }
+    else { if(sub)sub.textContent='Update found: v'+(r.version||'')+' (you have v'+(r.current||'')+') — downloading…'; }
+  }
+  else if(sub)sub.textContent=(r&&r.reason)||'Could not check for updates.';
+}
+function onUpdateStatus(s){
+  const sub=document.getElementById('update-sub'), restart=document.getElementById('restart-row'); if(!sub)return;
+  if(!s)return;
+  if(s.state==='available')sub.textContent='Update v'+(s.version||'')+' available — downloading…';
+  else if(s.state==='downloading')sub.textContent='Downloading update… '+(s.percent||0)+'%';
+  else if(s.state==='downloaded'){ sub.textContent='Update v'+(s.version||'')+' downloaded.'; if(restart)restart.style.display=''; }
+  else if(s.state==='none')sub.textContent='You’re up to date.';
+  else if(s.state==='error')sub.textContent='Update error: '+(s.message||'unknown');
+}
+function restartNow(){ if(window.pace&&window.pace.quitAndInstall)window.pace.quitAndInstall(); }
+function toast(msg){ const t=document.getElementById('save-toast'); if(!t)return; t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+function syncUI(){
+  document.body.classList.toggle('light',settings.theme==='light');
+  applyAccentVars();
+  ['fastMode','lightResources','adBlock','httpsOnly','clearOnExit','showSportsWidget'].forEach(k=>{const el=document.getElementById('tog-'+k);if(el)el.classList.toggle('on',!!settings[k]);});
+  ['animations','showBookmarksBar'].forEach(k=>{const el=document.getElementById('tog-'+k);if(el)el.classList.toggle('on',settings[k]!==false);});
+  const tb=settings.toolbarButtons||{downloads:true,extensions:true,apps:true,history:false};
+  ['downloads','extensions','apps','history'].forEach(k=>{const el=document.getElementById('tb-'+k);if(el)el.classList.toggle('on',!!tb[k]);});
+  setVal('sel-engine',settings.searchEngine||'google');
+  setVal('sel-theme',settings.theme||'dark');
+  setVal('sel-font',settings.fontSize||'medium');
+  setVal('sel-preload',String(settings.preloadCount||6));
+  const dlp=document.getElementById('dl-path-lbl'); if(dlp)dlp.textContent=settings.downloadPath||'Default downloads folder';
+  setVal('wallpaper-input',settings.wallpaper||'');
+  setVal('teams-input',(settings.sportsTeams||[]).join(', '));
+  filters=[...(settings.adBlockFilters||[])];
+  renderFilters(); renderColors(); renderColors2(); renderLeagues();
+}
+function setVal(id,v){const el=document.getElementById(id);if(el)el.value=v;}
+
+function toggleSetting(key,el){el.classList.toggle('on');settings[key]=el.classList.contains('on');save();}
+function toggleToolbar(key,el){el.classList.toggle('on');settings.toolbarButtons=settings.toolbarButtons||{downloads:true,extensions:true,apps:true,history:false};settings.toolbarButtons[key]=el.classList.contains('on');save();}
+function setSetting(key,val){settings[key]=val;save();}
+function setNum(key,val){settings[key]=parseInt(val,10);save();}
+function setTheme(val){settings.theme=val;document.body.classList.toggle('light',val==='light');save();}
+
+function renderColors(){document.getElementById('color-grid').innerHTML=ACCENTS.map(c=>'<div class="swatch'+((settings.accentColor||'#5b8ef0')===c?' active':'')+'" style="background:'+c+'" onclick="pickColor(\''+c+'\')"></div>').join('')+'<button class="sw-custom" title="Custom"><input type="color" id="cc1" value="'+(settings.accentColor||'#5b8ef0')+'"></button>';document.getElementById('cc1').addEventListener('input',e=>pickColor(e.target.value));}
+function renderColors2(){document.getElementById('color-grid2').innerHTML=ACCENTS.map(c=>'<div class="swatch'+((settings.accentColor2||'#a78bfa')===c?' active':'')+'" style="background:'+c+'" onclick="pickColor2(\''+c+'\')"></div>').join('')+'<button class="sw-custom" title="Custom"><input type="color" id="cc2" value="'+(settings.accentColor2||'#a78bfa')+'"></button>';document.getElementById('cc2').addEventListener('input',e=>pickColor2(e.target.value));}
+function pickColor(c){settings.accentColor=c;applyAccentVars();save();renderColors();}
+function pickColor2(c){settings.accentColor2=c;applyAccentVars();save();renderColors2();}
+
+function renderFilters(){document.getElementById('filter-tags').innerHTML=filters.length?filters.map(f=>'<div class="ftag">'+esc(f)+'<span class="rm" onclick="removeFilter(\''+esc(f)+'\')">✕</span></div>').join(''):'<span style="font-size:11px;color:var(--t3)">No filters</span>';}
+function addFilter(){const inp=document.getElementById('filter-input');const v=inp.value.trim().toLowerCase();if(v&&filters.indexOf(v)<0){filters.push(v);settings.adBlockFilters=filters;renderFilters();save();}inp.value='';}
+function removeFilter(f){filters=filters.filter(x=>x!==f);settings.adBlockFilters=filters;renderFilters();save();}
+
+function renderLeagues(){
+  const wrap=document.getElementById('lg-chips');
+  const chosen=settings.sportsLeagues||['nfl','nba'];
+  wrap.innerHTML=LEAGUES.map(l=>'<button class="lg-chip'+(chosen.indexOf(l[0])>=0?' on':'')+'" data-id="'+l[0]+'">'+l[1]+'</button>').join('');
+  wrap.querySelectorAll('.lg-chip').forEach(c=>c.addEventListener('click',()=>{
+    settings.sportsLeagues=settings.sportsLeagues||['nfl','nba'];
+    const id=c.dataset.id;
+    if(settings.sportsLeagues.indexOf(id)>=0)settings.sportsLeagues=settings.sportsLeagues.filter(x=>x!==id);
+    else settings.sportsLeagues.push(id);
+    c.classList.toggle('on');save();
+  }));
+}
+function saveTeams(){const raw=document.getElementById('teams-input').value.trim();settings.sportsTeams=raw?raw.split(',').map(s=>s.trim()).filter(Boolean):[];save();}
+
+function saveWallpaper(){const v=document.getElementById('wallpaper-input').value.trim();settings.wallpaper=v;save();}
+function clearWallpaper(){settings.wallpaper='';document.getElementById('wallpaper-input').value='';save();}
+
+async function changeDlPath(){if(!window.pace)return;const p=await window.pace.chooseDownloadPath();if(p){settings.downloadPath=p;document.getElementById('dl-path-lbl').textContent=p;save();}}
+
+async function clearData(){
+  if(!confirm('Clear all browsing history, cookies and cached data? This cannot be undone.'))return;
+  if(window.pace){ const ok=await window.pace.clearBrowsingData(); showSaveToast(ok?'🗑 All data cleared':'⚠ Could not clear data'); }
+}
+async function clearBm(scope,btn){
+  const labels={all:'ALL bookmarks',bar:'all bookmarks on the bar',other:'all "Other" bookmarks'};
+  if(!confirm('Remove '+labels[scope]+'? This cannot be undone.'))return;
+  if(window.pace&&window.pace.clearBookmarks){ await window.pace.clearBookmarks(scope); showSaveToast('🔖 Bookmarks cleared'); }
+}
+
+function save(){if(window.pace)window.pace.saveSettings(settings);showSaveToast('✅ Saved');}
+let saveTimer;
+function showSaveToast(msg){msg=msg||'✅ Saved';const t=document.getElementById('save-toast');t.textContent=msg;t.classList.add('show');clearTimeout(saveTimer);saveTimer=setTimeout(()=>t.classList.remove('show'),1400);}
+
+init();
+</script>
+</body>
+</html>
