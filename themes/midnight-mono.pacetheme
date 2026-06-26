@@ -1,0 +1,28 @@
+{
+  "pacetheme": 1,
+  "id": "midnight-mono",
+  "name": "Midnight Mono",
+  "version": "1.0.0",
+  "author": "Pace",
+  "description": "Monochrome and minimal — pure graphite glass.",
+  "mode": "dark",
+  "design": {
+    "accent": "#c7c9d6",
+    "accent2": "#9a9db0",
+    "bg0": "#0b0b0d",
+    "bg1": "#141417",
+    "glass": "rgba(26,26,30,.58)",
+    "glass2": "rgba(36,36,42,.64)",
+    "glassHi": "rgba(255,255,255,.07)",
+    "glassLine": "rgba(255,255,255,.09)",
+    "hover": "rgba(255,255,255,.06)",
+    "active": "rgba(255,255,255,.12)",
+    "text1": "#f2f2f5",
+    "text2": "#a6a7b2",
+    "text3": "#65666f",
+    "glassBlur": "28px",
+    "glassSat": "130%",
+    "radius": "12px",
+    "radiusLg": "16px"
+  }
+}
