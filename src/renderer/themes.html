@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Themes · Pace</title>
+<style>
+  :root{--acc:#5b8ef0;--bg:#08080c;--card:#101017;--t1:#f4f5fa;--t2:#9b9faf;--t3:#6b6f7f;--line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.12);--glass:rgba(255,255,255,.035);--ok:#5bd6a0;--err:#ff6b73;--r:18px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-font-smoothing:antialiased}
+  body{font:15px/1.6 'Segoe UI Variable','Segoe UI',-apple-system,system-ui,sans-serif;color:var(--t1);
+    background:radial-gradient(1200px 620px at 50% -22%,rgba(91,142,240,.12),transparent 72%),var(--bg);min-height:100vh}
+  .wrap{max-width:1040px;margin:0 auto;padding:48px 28px 80px}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:30px;font-weight:700;letter-spacing:-.7px}
+  .sub{color:var(--t2);margin-top:4px;font-size:15px}
+  .tools{display:flex;gap:9px}
+  .btn{border:none;background:var(--glass);color:var(--t1);border:1px solid var(--line2);font-family:inherit;font-weight:600;font-size:13px;padding:10px 16px;border-radius:11px;cursor:pointer;transition:background .15s,filter .15s;white-space:nowrap}
+  .btn:hover{background:rgba(255,255,255,.07)}
+  .btn.prim{background:var(--acc);border:none;color:#fff}
+  .btn.prim:hover{filter:brightness(1.1)}
+  #msg{margin:14px 0 0;font-size:13.5px;min-height:18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;margin-top:26px}
+  .tcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;transition:transform .16s,border-color .16s}
+  .tcard:hover{transform:translateY(-2px);border-color:var(--line2)}
+  .tcard.active{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+  .prev{height:138px;position:relative;padding:13px;display:flex;flex-direction:column;gap:9px}
+  .prev .pbar{height:30px;border-radius:9px;display:flex;align-items:center;gap:7px;padding:0 10px}
+  .prev .ptab{height:22px;width:96px;border-radius:7px 7px 0 0;align-self:flex-start;display:flex;align-items:center;padding:0 9px;gap:6px;font-size:10px;font-weight:600;overflow:hidden;white-space:nowrap}
+  .prev .pdot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+  .prev .ppill{flex:1;height:15px;border-radius:999px}
+  .prev .pbody{flex:1;border-radius:10px;display:flex;flex-direction:column;gap:7px;padding:11px}
+  .prev .pln{height:7px;border-radius:4px}
+  .meta{padding:15px 17px 17px}
+  .nm{font-size:15.5px;font-weight:650;letter-spacing:-.2px;display:flex;align-items:center;gap:8px}
+  .badge{font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--acc);background:rgba(91,142,240,.14);padding:2px 8px;border-radius:20px;text-transform:uppercase}
+  .badge.user{color:var(--t2);background:var(--glass)}
+  .by{color:var(--t3);font-size:12px;margin-top:2px}
+  .ds{color:var(--t2);font-size:13px;margin-top:8px;line-height:1.5;min-height:38px}
+  .row{display:flex;gap:8px;margin-top:14px}
+  .row .btn{flex:1;text-align:center;padding:9px}
+  .x{flex:0 0 auto;width:38px;padding:0!important;color:var(--t3)}
+  .x:hover{color:var(--err);border-color:var(--err)}
+  .empty{color:var(--t3);padding:40px;text-align:center}
+  .note{margin-top:34px;padding:18px 20px;border-radius:var(--r);background:var(--glass);border:1px solid var(--line);color:var(--t2);font-size:13px;line-height:1.65}
+  .note b{color:var(--t1)} code{background:rgba(255,255,255,.06);padding:2px 6px;border-radius:6px;color:var(--acc);font-size:12px;font-family:ui-monospace,Menlo,monospace}
+  input[type=file]{display:none}
+</style></head>
+<body><div class="wrap">
+  <div class="head">
+    <div><h1>Themes</h1><div class="sub">Restyle Pace itself. Themes use the <code>.pacetheme</code> format.</div></div>
+    <div class="tools">
+      <button class="btn prim" id="install">Install theme</button>
+      <button class="btn" id="reset">Reset to default</button>
+    </div>
+  </div>
+  <div id="msg"></div>
+  <div class="grid" id="grid"><div class="empty">Loading themes…</div></div>
+  <div class="note"><b>About .pacetheme files.</b> A theme is a single JSON file that remaps Pace's design — accent, glass, text, and surface colors. Built-in themes can't be removed. To make your own, export from any theme as a starting point and edit the <code>design</code> values, then install it here or publish it to the Shop.</div>
+  <input type="file" id="file" accept=".pacetheme,application/json">
+</div>
+<script>
+  const $=id=>document.getElementById(id);
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  // Sanitize a value before placing it inside an inline style="" attribute.
+  function cv(v,fallback){ v=String(v==null?'':v).replace(/[<>"'\\;{}]/g,'').trim(); return v||fallback; }
+  function msg(t,kind){ const m=$('msg'); m.textContent=t||''; m.style.color=kind==='err'?'var(--err)':kind==='ok'?'var(--ok)':'var(--t2)'; }
+
+  function previewHtml(d,mode){
+    d=d||{};
+    const bg0=cv(d.bg0, mode==='light'?'#eef1f6':'#0a0a12'), bg1=cv(d.bg1, mode==='light'?'#f7f9fc':'#10101c');
+    const glass2=cv(d.glass2,'rgba(40,42,66,.62)'), line=cv(d.glassLine,'rgba(255,255,255,.08)');
+    const acc=cv(d.accent,'#5b8ef0'), acc2=cv(d.accent2,acc);
+    const t1=cv(d.text1,'#f1f1fb'), t2=cv(d.text2,'#9d9dc8');
+    const pill=cv(d.glass,'rgba(28,29,46,.55)');
+    return '<div class="prev" style="background:linear-gradient(160deg,'+bg0+','+bg1+')">'+
+      '<div class="ptab" style="background:'+glass2+';border:1px solid '+line+';border-bottom:none;color:'+t1+'"><span class="pdot" style="width:9px;height:9px;background:'+acc+'"></span>Tab</div>'+
+      '<div class="pbar" style="background:'+glass2+';border:1px solid '+line+'"><span class="pdot" style="background:'+acc+'"></span><span class="ppill" style="background:'+pill+';border:1px solid '+line+'"></span><span class="pdot" style="background:'+acc2+'"></span></div>'+
+      '<div class="pbody" style="background:'+pill+';border:1px solid '+line+'"><span class="pln" style="width:70%;background:'+t1+'"></span><span class="pln" style="width:90%;background:'+t2+'"></span><span class="pln" style="width:45%;background:'+acc+'"></span></div>'+
+    '</div>';
+  }
+
+  function card(t){
+    const el=document.createElement('div');
+    el.className='tcard'+(t.active?' active':'');
+    el.innerHTML=previewHtml(t.design,t.mode)+
+      '<div class="meta"><div class="nm">'+esc(t.name)+(t.active?'<span class="badge">Active</span>':(t.builtin?'':'<span class="badge user">Custom</span>'))+'</div>'+
+      '<div class="by">'+(t.author?('by '+esc(t.author)):'')+' · v'+esc(t.version)+' · '+esc(t.mode)+'</div>'+
+      '<div class="ds">'+esc(t.description||'')+'</div>'+
+      '<div class="row">'+
+        (t.active?'<button class="btn" disabled style="opacity:.5">Applied</button>':'<button class="btn prim" data-apply="'+esc(t.id)+'">Apply</button>')+
+        (t.builtin?'':'<button class="btn x" data-remove="'+esc(t.id)+'" title="Remove">✕</button>')+
+      '</div></div>';
+    return el;
+  }
+
+  async function render(){
+    let list=[];
+    try{ list=await pace.themesList()||[]; }catch(e){ list=[]; }
+    const g=$('grid');
+    if(!list.length){ g.innerHTML='<div class="empty">No themes available.</div>'; return; }
+    g.innerHTML=''; list.forEach(t=>g.appendChild(card(t)));
+    g.querySelectorAll('[data-apply]').forEach(b=>b.addEventListener('click',async()=>{ msg('Applying…'); const r=await pace.themesApply(b.dataset.apply); if(r&&r.ok){ msg('Theme applied.','ok'); render(); } else msg((r&&r.error)||'Could not apply theme.','err'); }));
+    g.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',async()=>{ const r=await pace.themesRemove(b.dataset.remove); if(r&&r.ok){ msg('Theme removed.','ok'); render(); } else msg((r&&r.error)||'Could not remove theme.','err'); }));
+  }
+
+  $('install').addEventListener('click',()=>$('file').click());
+  $('file').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value='';
+    if(!f) return;
+    if(!/\.pacetheme$/i.test(f.name)&&f.type!=='application/json'){ msg('Choose a .pacetheme file.','err'); return; }
+    if(f.size>512*1024){ msg('That file is too large for a theme.','err'); return; }
+    let doc; try{ doc=JSON.parse(await f.text()); }catch(err){ msg('That file is not valid JSON.','err'); return; }
+    const r=await pace.themesInstall(doc);
+    if(r&&r.ok){ msg('Installed “'+(r.name||'theme')+'”.','ok'); render(); } else msg((r&&r.error)||'Could not install theme.','err');
+  });
+  $('reset').addEventListener('click',async()=>{ const r=await pace.themesReset(); if(r&&r.ok){ msg('Reset to the default theme.','ok'); render(); } });
+
+  render();
+</script></body></html>
