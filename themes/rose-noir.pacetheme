@@ -1,0 +1,28 @@
+{
+  "pacetheme": 1,
+  "id": "rose-noir",
+  "name": "Rosé Noir",
+  "version": "1.0.0",
+  "author": "Pace",
+  "description": "Near-black with a soft rose bloom.",
+  "mode": "dark",
+  "design": {
+    "accent": "#e88aa6",
+    "accent2": "#f4b8c8",
+    "bg0": "#0c0a0d",
+    "bg1": "#161116",
+    "glass": "rgba(30,22,28,.60)",
+    "glass2": "rgba(42,30,39,.66)",
+    "glassHi": "rgba(255,255,255,.07)",
+    "glassLine": "rgba(232,138,166,.13)",
+    "hover": "rgba(255,255,255,.06)",
+    "active": "rgba(232,138,166,.15)",
+    "text1": "#f6eef2",
+    "text2": "#c2a8b5",
+    "text3": "#786470",
+    "glassBlur": "28px",
+    "glassSat": "170%",
+    "radius": "15px",
+    "radiusLg": "20px"
+  }
+}

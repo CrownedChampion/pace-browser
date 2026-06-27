@@ -1,0 +1,28 @@
+{
+  "pacetheme": 1,
+  "id": "emerald",
+  "name": "Emerald",
+  "version": "1.0.0",
+  "author": "Pace",
+  "description": "Deep forest glass with a cool emerald accent.",
+  "mode": "dark",
+  "design": {
+    "accent": "#4fd1a0",
+    "accent2": "#8ef0c8",
+    "bg0": "#07100c",
+    "bg1": "#0e1a14",
+    "glass": "rgba(16,30,24,.58)",
+    "glass2": "rgba(22,40,31,.64)",
+    "glassHi": "rgba(255,255,255,.07)",
+    "glassLine": "rgba(79,209,160,.13)",
+    "hover": "rgba(255,255,255,.06)",
+    "active": "rgba(79,209,160,.15)",
+    "text1": "#eaf5ef",
+    "text2": "#9bc2af",
+    "text3": "#5c7067",
+    "glassBlur": "26px",
+    "glassSat": "165%",
+    "radius": "13px",
+    "radiusLg": "18px"
+  }
+}
