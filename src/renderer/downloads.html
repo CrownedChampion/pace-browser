@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Downloads — Pace</title>
+<style>
+:root{--acc:#5b8ef0;--acc2:#a78bfa;--bg:#0a0a12;--surf:rgba(28,29,46,.55);--card:rgba(40,42,66,.5);--hover:rgba(255,255,255,.08);--border:rgba(255,255,255,.08);--t1:#f1f1fb;--t2:#9d9dc8;--t3:#5c5c7e;--glass-hi:rgba(255,255,255,.09);--font:'Segoe UI Variable','Segoe UI',-apple-system,'Inter',system-ui,sans-serif;--r-md:14px;--r-lg:20px;--r-pill:999px;--ease:cubic-bezier(.22,.8,.32,1)}
+body.light{--bg:#eef1fb;--surf:rgba(255,255,255,.62);--card:rgba(255,255,255,.74);--hover:rgba(20,24,60,.06);--border:rgba(20,24,60,.1);--t1:#13132b;--t2:#4f5388;--t3:#9a9ec4;--glass-hi:rgba(255,255,255,.85)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--t1);min-height:100vh;transition:background .2s}
+.page{max-width:700px;margin:0 auto;padding:40px 24px}
+.ph{display:flex;align-items:center;gap:14px;margin-bottom:32px}
+.ph-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--acc),var(--acc2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.ph-title{font-size:24px;font-weight:700}.ph-sub{font-size:13px;color:var(--t2);margin-top:2px}
+.dl-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;margin-bottom:10px;transition:border-color .2s}
+.dl-card:hover{border-color:rgba(91,142,240,.2)}
+.dl-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+.dl-file-icon{width:40px;height:40px;border-radius:10px;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.dl-info{flex:1;min-width:0}
+.dl-name{font-size:14px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-url{font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.dl-status{font-size:11px;font-weight:600;margin-top:4px}
+.dl-status.done{color:#34c777}.dl-status.fail{color:#ff5555}.dl-status.prog{color:var(--acc)}
+.dl-bar-bg{height:4px;background:var(--hover);border-radius:var(--r-pill);overflow:hidden;margin-bottom:8px}
+.dl-bar{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:var(--r-pill);transition:width .3s}
+.dl-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--t2)}
+.dl-actions{display:flex;gap:6px;margin-top:10px}
+.btn-sm{padding:5px 12px;border-radius:var(--r-pill);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font);border:1.5px solid var(--border);background:var(--hover);color:var(--t1);transition:all .15s}
+.btn-sm:hover{background:var(--acc);color:#fff;border-color:var(--acc)}
+.empty{text-align:center;padding:60px;color:var(--t3)}
+.empty-ico{font-size:48px;margin-bottom:12px;opacity:.3}
+</style>
+<style>
+#amb{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+#amb::before,#amb::after{content:"";position:absolute;border-radius:50%;filter:blur(80px);opacity:.4}
+#amb::before{width:48vw;height:48vw;left:-8vw;top:-12vw;background:radial-gradient(circle,var(--acc),transparent 70%)}
+#amb::after{width:42vw;height:42vw;right:-10vw;bottom:-10vw;background:radial-gradient(circle,var(--acc2),transparent 70%)}
+.page{position:relative;z-index:1}
+.hist-item,.dl-card{-webkit-backdrop-filter:blur(26px) saturate(170%);backdrop-filter:blur(26px) saturate(170%);box-shadow:inset 0 1px 0 var(--glass-hi)}
+.search-bar,.tabs{-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+</style>
+</head>
+<body><div id="amb"></div>
+<div class="page">
+  <div class="ph">
+    <div class="ph-icon">⬇️</div>
+    <div><div class="ph-title">Downloads</div><div class="ph-sub">Files you've downloaded with Pace</div></div>
+  </div>
+  <div id="dl-list"></div>
+</div>
+<script>
+function fileIcon(name){const ext=(name||'').split('.').pop().toLowerCase();const map={pdf:'📄',mp4:'🎬',mp3:'🎵',zip:'🗜',rar:'🗜',png:'🖼',jpg:'🖼',gif:'🖼',exe:'⚙️',dmg:'💿',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',ppt:'📋'};return map[ext]||'📁'}
+function fmt(b){if(!b)return '?';if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB'}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+async function init(){
+  let dls=[];
+  if(window.pace){
+    const s=await window.pace.getSettings();
+    document.body.classList.toggle('light',s.theme==='light');if(s.accentColor)document.documentElement.style.setProperty('--acc',s.accentColor);if(s.accentColor2)document.documentElement.style.setProperty('--acc2',s.accentColor2);
+    dls=await window.pace.getDownloads()||[];
+  }
+  const list=document.getElementById('dl-list');
+  if(!dls.length){list.innerHTML='<div class="empty"><div class="empty-ico">⬇️</div><div>No downloads yet</div></div>';return;}
+  list.innerHTML=dls.map(dl=>{
+    const done=dl.state==='completed';const fail=dl.state==='interrupted'||dl.state==='cancelled';
+    const pct=dl.total?Math.min(100,Math.round((dl.received/dl.total)*100)):0;
+    return`<div class="dl-card">
+      <div class="dl-top">
+        <div class="dl-file-icon">${fileIcon(dl.filename)}</div>
+        <div class="dl-info">
+          <div class="dl-name" title="${esc(dl.filename)}">${esc(dl.filename)}</div>
+          <div class="dl-url">${esc(dl.url)}</div>
+          <div class="dl-status ${done?'done':fail?'fail':'prog'}">${done?'✅ Completed':fail?'❌ Failed':`⬇ ${pct}%`}</div>
+        </div>
+      </div>
+      ${!done&&!fail?`<div class="dl-bar-bg"><div class="dl-bar" style="width:${pct}%"></div></div>`:''}
+      <div class="dl-meta"><span>${fmt(dl.received)}${dl.total?' / '+fmt(dl.total):''}</span><span>${new Date(dl.startTime).toLocaleString()}</span></div>
+      ${done?`<div class="dl-actions">
+        <button class="btn-sm" onclick="window.pace&&window.pace.openFile('${esc(dl.savePath)}')">Open</button>
+        <button class="btn-sm" onclick="window.pace&&window.pace.showInFolder('${esc(dl.savePath)}')">Show in Folder</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+init();
+</script>
+</body>
+</html>
