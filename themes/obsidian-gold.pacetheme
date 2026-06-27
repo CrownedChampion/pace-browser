@@ -1,0 +1,28 @@
+{
+  "pacetheme": 1,
+  "id": "obsidian-gold",
+  "name": "Obsidian Gold",
+  "version": "1.0.0",
+  "author": "Pace",
+  "description": "Black glass with warm, restrained gold.",
+  "mode": "dark",
+  "design": {
+    "accent": "#d8b46a",
+    "accent2": "#f0d488",
+    "bg0": "#09090b",
+    "bg1": "#131214",
+    "glass": "rgba(24,22,20,.60)",
+    "glass2": "rgba(34,31,27,.66)",
+    "glassHi": "rgba(255,255,255,.06)",
+    "glassLine": "rgba(216,180,106,.12)",
+    "hover": "rgba(255,255,255,.05)",
+    "active": "rgba(216,180,106,.14)",
+    "text1": "#f4efe4",
+    "text2": "#b6ac96",
+    "text3": "#6f6857",
+    "glassBlur": "30px",
+    "glassSat": "160%",
+    "radius": "14px",
+    "radiusLg": "18px"
+  }
+}
