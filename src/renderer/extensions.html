@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pace Addon Shop</title>
+<style>
+  :root{
+    --bg:#0b0b12; --t1:#f3f4fb; --t2:#a7abbd; --acc:#5b8ef0; --acc2:#a78bfa;
+    --glass:rgba(255,255,255,.045); --glass-2:rgba(255,255,255,.07); --line:rgba(255,255,255,.10);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,Segoe UI,Roboto,system-ui,sans-serif;color:var(--t1);
+    background:radial-gradient(1200px 600px at 20% -10%,rgba(91,142,240,.16),transparent),
+               radial-gradient(900px 500px at 110% 10%,rgba(167,139,250,.13),transparent),var(--bg);
+    min-height:100vh;padding:30px 24px 60px}
+  .wrap{max-width:880px;margin:0 auto}
+  .top{display:flex;align-items:center;gap:13px;margin-bottom:6px}
+  .logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+    display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 6px 20px -6px rgba(91,142,240,.6)}
+  h1{font-size:23px;margin:0;font-weight:700;letter-spacing:-.2px}
+  .sub{color:var(--t2);margin:2px 0 24px;font-size:13.5px}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:13px;margin-bottom:14px}
+  .cta{display:flex;align-items:center;gap:13px;padding:16px;border-radius:var(--r);cursor:pointer;
+    background:var(--glass);border:1px solid var(--line);transition:.15s;text-decoration:none;color:inherit}
+  .cta:hover{background:var(--glass-2);border-color:color-mix(in srgb,var(--acc) 40%,var(--line));transform:translateY(-1px)}
+  .cta-ico{width:42px;height:42px;border-radius:11px;background:var(--glass-2);display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0}
+  .cta-t{font-weight:600}
+  .cta-s{color:var(--t2);font-size:12.5px}
+  .sec{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--t2);margin:26px 4px 11px;font-weight:600}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:var(--r);background:var(--glass);border:1px solid var(--line)}
+  .ic{width:40px;height:40px;border-radius:10px;background:var(--glass-2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .meta{flex:1;min-width:0}
+  .nm{font-weight:600;display:flex;align-items:center;gap:8px}
+  .ver{font-size:11px;color:var(--t2);font-weight:500;background:var(--glass-2);padding:1px 7px;border-radius:20px}
+  .badge{font-size:10.5px;color:var(--acc);border:1px solid color-mix(in srgb,var(--acc) 45%,transparent);padding:1px 7px;border-radius:20px}
+  .ds{color:var(--t2);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .sw{position:relative;width:42px;height:24px;border-radius:20px;background:var(--glass-2);border:1px solid var(--line);cursor:pointer;transition:.18s}
+  .sw.on{background:var(--acc);border-color:var(--acc)}
+  .sw::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.18s}
+  .sw.on::after{left:20px}
+  .rm{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--t2);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .rm:hover{background:rgba(255,80,85,.18);color:#ff6066;border-color:transparent}
+  .empty{padding:28px;text-align:center;color:var(--t2);border:1px dashed var(--line);border-radius:var(--r);background:var(--glass)}
+  .note{margin-top:26px;padding:16px;border-radius:var(--r);background:var(--glass);border:1px solid var(--line);color:var(--t2);font-size:13px}
+  .note b{color:var(--t1)} .note code{background:var(--glass-2);padding:1px 6px;border-radius:5px;color:var(--acc);font-size:12px}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;
+    background:#1a1a26;border:1px solid var(--line);padding:11px 18px;border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.5);pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="logo">⚡</div><h1>Pace Addon Shop</h1></div>
+  <div class="sub">Native addons built for Pace — no Chrome Web Store, no broken service workers.</div>
+
+  <div class="row">
+    <a class="cta" id="store-link" href="#" onclick="openStore(event)">
+      <div class="cta-ico">🛍️</div>
+      <div><div class="cta-t">Browse the Pace Addon Shop ↗</div><div class="cta-s">Find reviewed addons (opens in a new tab)</div></div>
+    </a>
+    <div class="cta" onclick="installFile()">
+      <div class="cta-ico">📦</div>
+      <div><div class="cta-t">Install from file…</div><div class="cta-s">A .paceaddon or .pacetheme from the Shop</div></div>
+    </div>
+    <div class="cta" onclick="installFolder()">
+      <div class="cta-ico">📁</div>
+      <div><div class="cta-t">Install from folder…</div><div class="cta-s">A Pace Addon folder on disk</div></div>
+    </div>
+  </div>
+
+  <div class="sec">Installed addons</div>
+  <div class="list" id="list"></div>
+
+  <div class="note">
+    <b>What is a Pace Addon?</b> Pace doesn't run Chrome extensions — modern ones rely on a background
+    service worker that can't run on Pace's engine, which is why they fail to load. A <b>Pace Addon</b> is
+    a small folder with an <code>addon.json</code> that the browser drives directly: it can hide elements,
+    inject content scripts, and block network requests — no service worker needed. Building one is easy;
+    the format is documented in the project README. Addons installed from outside the official Shop show a
+    security warning first, because an addon can read and change the pages you visit.
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const STORE_URL='https://paceaddonshop.thestripedfox.workers.dev';
+const ICONS=['🧩','🛡️','🎨','⚙️','🔖','🔍','🌙','⌨️'];
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+function openStore(e){ if(e)e.preventDefault(); if(window.pace&&pace.newTab){ pace.newTab(STORE_URL); } }
+
+async function render(){
+  let items=[];
+  try{ items = (window.pace&&pace.getAddons)?await pace.getAddons():[]; }catch(e){ items=[]; }
+  const list=document.getElementById('list');
+  if(!items.length){ list.innerHTML='<div class="empty">No addons installed yet. Browse the Shop above, or install one from a folder.</div>'; return; }
+  list.innerHTML='';
+  items.forEach((a,i)=>{
+    const card=document.createElement('div'); card.className='card';
+    card.innerHTML=
+      '<div class="ic">'+ICONS[i%ICONS.length]+'</div>'+
+      '<div class="meta"><div class="nm">'+esc(a.name)+' <span class="ver">v'+esc(a.version)+'</span>'+(a.builtin?' <span class="badge">Built-in</span>':'')+'</div>'+
+      '<div class="ds">'+(esc(a.description)||esc(a.author)||'Pace Addon')+'</div></div>'+
+      '<div class="actions">'+
+        '<div class="sw'+(a.enabled?' on':'')+'" title="Enable / disable" data-id="'+esc(a.id)+'"></div>'+
+        (a.builtin?'':'<button class="rm" title="Remove" data-rm="'+esc(a.id)+'">🗑</button>')+
+      '</div>';
+    list.appendChild(card);
+  });
+  list.querySelectorAll('.sw').forEach(sw=>sw.addEventListener('click',async()=>{
+    const id=sw.dataset.id, on=!sw.classList.contains('on');
+    sw.classList.toggle('on',on);
+    try{ await pace.setAddonEnabled(id,on); toast(on?'Addon enabled — reload pages to apply':'Addon disabled'); }catch(e){ sw.classList.toggle('on',!on); }
+  }));
+  list.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',async()=>{
+    const id=b.dataset.rm;
+    try{ const r=await pace.removeAddon(id); if(r&&r.ok){ toast('Addon removed'); render(); } else { toast((r&&r.reason)||'Could not remove'); } }catch(e){ toast('Could not remove'); }
+  }));
+}
+async function installFolder(){
+  try{
+    const r=await pace.installAddonFolder();
+    if(r&&r.ok){ toast('Installed “'+(r.name||'addon')+'”'); render(); }
+    else if(r&&r.reason&&r.reason!=='cancelled'){ toast(r.reason); }
+  }catch(e){ toast('Install failed'); }
+}
+async function installFile(){
+  try{
+    const r=await pace.installAddonFile();
+    if(r&&r.ok){ toast(r.kind==='theme'?('Installed & applied theme “'+(r.name||'theme')+'”'):('Installed “'+(r.name||'addon')+'”')); render(); }
+    else if(r&&r.reason&&r.reason!=='cancelled'){ toast(r.reason); }
+  }catch(e){ toast('Install failed'); }
+}
+render();
+</script>
+</body>
+</html>
