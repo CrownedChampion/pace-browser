@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>History — Pace</title>
+<style>
+:root{--acc:#5b8ef0;--acc2:#a78bfa;--bg:#0a0a12;--surf:rgba(28,29,46,.55);--card:rgba(40,42,66,.5);--hover:rgba(255,255,255,.08);--border:rgba(255,255,255,.08);--t1:#f1f1fb;--t2:#9d9dc8;--t3:#5c5c7e;--glass-hi:rgba(255,255,255,.09);--font:'Segoe UI Variable','Segoe UI',-apple-system,'Inter',system-ui,sans-serif;--r-md:14px;--r-lg:20px;--r-pill:999px}
+body.light{--bg:#eef1fb;--surf:rgba(255,255,255,.62);--card:rgba(255,255,255,.74);--hover:rgba(20,24,60,.06);--border:rgba(20,24,60,.1);--t1:#13132b;--t2:#4f5388;--t3:#9a9ec4;--glass-hi:rgba(255,255,255,.85)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--t1);min-height:100vh;transition:background .2s}
+.page{max-width:700px;margin:0 auto;padding:40px 24px}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.ph-left{display:flex;align-items:center;gap:14px}
+.ph-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--acc),var(--acc2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.ph-title{font-size:24px;font-weight:700}.ph-sub{font-size:13px;color:var(--t2);margin-top:2px}
+.search-bar{display:flex;gap:8px;margin-bottom:24px}
+.search-input{flex:1;background:var(--card);border:1.5px solid var(--border);color:var(--t1);font-family:var(--font);font-size:13px;padding:10px 14px;border-radius:var(--r-pill);outline:none;transition:border-color .2s}
+.search-input:focus{border-color:var(--acc)}
+.btn-danger{padding:9px 18px;border-radius:var(--r-pill);background:rgba(255,60,60,.1);color:#ff5555;border:1.5px solid rgba(255,60,60,.25);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);transition:all .15s}
+.btn-danger:hover{background:rgba(255,60,60,.2)}
+.day-group{margin-bottom:24px}
+.day-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:8px;padding:0 4px}
+.hist-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border-radius:var(--r-md);margin-bottom:4px;border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.hist-item:hover{background:var(--hover);border-color:rgba(91,142,240,.2)}
+.hist-ico{width:28px;height:28px;background:var(--hover);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.hist-info{flex:1;min-width:0}
+.hist-title{font-size:13px;font-weight:500;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-url{font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.hist-time{font-size:10px;color:var(--t3);flex-shrink:0}
+.empty{text-align:center;padding:60px;color:var(--t3)}
+</style>
+<style>
+#amb{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+#amb::before,#amb::after{content:"";position:absolute;border-radius:50%;filter:blur(80px);opacity:.4}
+#amb::before{width:48vw;height:48vw;left:-8vw;top:-12vw;background:radial-gradient(circle,var(--acc),transparent 70%)}
+#amb::after{width:42vw;height:42vw;right:-10vw;bottom:-10vw;background:radial-gradient(circle,var(--acc2),transparent 70%)}
+.page{position:relative;z-index:1}
+.hist-item,.dl-card{-webkit-backdrop-filter:blur(26px) saturate(170%);backdrop-filter:blur(26px) saturate(170%);box-shadow:inset 0 1px 0 var(--glass-hi)}
+.search-bar,.tabs{-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+</style>
+</head>
+<body><div id="amb"></div>
+<div class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-icon">📜</div>
+      <div><div class="ph-title">History</div><div class="ph-sub">Your browsing history</div></div>
+    </div>
+  </div>
+  <div class="search-bar">
+    <input class="search-input" id="search" placeholder="Search history…" oninput="filter(this.value)">
+    <button class="btn-danger" onclick="clearAll()">Clear All</button>
+  </div>
+  <div id="hist-list"></div>
+</div>
+<script>
+let allHistory=[];
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function dayLabel(ts){const d=new Date(ts),now=new Date();const diff=now.setHours(0,0,0,0)-new Date(d).setHours(0,0,0,0);if(diff===0)return'Today';if(diff===86400000)return'Yesterday';return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}
+
+function render(items){
+  const list=document.getElementById('hist-list');
+  if(!items.length){list.innerHTML='<div class="empty">No history found</div>';return;}
+  const groups={};
+  items.forEach(h=>{const k=dayLabel(h.time);if(!groups[k])groups[k]=[];groups[k].push(h);});
+  list.innerHTML=Object.entries(groups).map(([day,hs])=>`
+    <div class="day-group">
+      <div class="day-label">${day}</div>
+      ${hs.map(h=>`
+        <div class="hist-item" onclick="nav('${esc(h.url)}')">
+          <div class="hist-ico">🌐</div>
+          <div class="hist-info">
+            <div class="hist-title">${esc(h.title||h.url)}</div>
+            <div class="hist-url">${esc(h.url)}</div>
+          </div>
+          <div class="hist-time">${new Date(h.time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+function filter(q){render(q?allHistory.filter(h=>(h.title+h.url).toLowerCase().includes(q.toLowerCase())):allHistory)}
+function nav(url){if(window.pace)window.pace.navigate(url)}
+function clearAll(){if(confirm('Clear all browsing history?')){if(window.pace)window.pace.clearHistory();allHistory=[];render([]);}}
+function removeOne(e,url){e.stopPropagation();if(window.pace)window.pace.removeHistoryItem(url);allHistory=allHistory.filter(h=>h.url!==url);render(allHistory);}
+
+async function init(){
+  if(window.pace){
+    const s=await window.pace.getSettings();
+    document.body.classList.toggle('light',s.theme==='light');if(s.accentColor)document.documentElement.style.setProperty('--acc',s.accentColor);if(s.accentColor2)document.documentElement.style.setProperty('--acc2',s.accentColor2);
+    allHistory=await window.pace.getHistory()||[];
+  }
+  render(allHistory);
+}
+init();
+</script>
+</body>
+</html>
