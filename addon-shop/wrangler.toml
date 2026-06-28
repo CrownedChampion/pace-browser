@@ -1,0 +1,16 @@
+# Pace Addon Shop — Cloudflare Worker config
+# Deploys to: paceaddonshop.<your-subdomain>.workers.dev
+name = "paceaddonshop"
+main = "src/worker.js"
+compatibility_date = "2025-06-01"
+
+# Storage is Backblaze B2 (native API) — no Cloudflare binding needed.
+# The bucket name is public-ish config, so it can live here as a plain var:
+[vars]
+B2_BUCKET_NAME = "pace-addons"   # <-- change to the bucket name you create in Backblaze
+
+# Everything secret is set with `wrangler secret put NAME` so it never lands in git:
+#   wrangler secret put B2_KEY_ID       (your Backblaze keyID)
+#   wrangler secret put B2_APP_KEY      (your Backblaze applicationKey)
+#   wrangler secret put B2_BUCKET_ID    (the bucket's ID, shown after you create it)
+#   wrangler secret put SESSION_SECRET  (any long random string; signs developer sign-in sessions)
